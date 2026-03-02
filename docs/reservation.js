@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_BASE = "http://localhost:3001";
+  const API_BASE = "/api";
 
   // ====== Date: default today + min today + show picker on click ======
   function pad2(n) { return String(n).padStart(2, "0"); }
@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
     dateEl.value = todayStr;
     dateEl.min = todayStr;
 
+    // (opcionalno) auto-open date picker
     dateEl.addEventListener("click", () => {
       if (dateEl.showPicker) dateEl.showPicker();
     });
@@ -50,22 +51,22 @@ document.addEventListener("DOMContentLoaded", () => {
       const valueSpan = cs.querySelector(".cselect-value");
       if (!hidden || !valueSpan) return;
 
+      // ako je disabled (npr "Nema slobodnih termina")
+      if (opt.dataset.disabled === "1") return;
+
       cs.querySelectorAll(".cselect-opt").forEach((o) => o.classList.remove("selected"));
       opt.classList.add("selected");
 
-      hidden.value = opt.dataset.value;
+      hidden.value = opt.dataset.value || "";
       valueSpan.textContent = opt.textContent;
 
       cs.classList.remove("open");
       const b = cs.querySelector(".cselect-btn");
       if (b) b.setAttribute("aria-expanded", "false");
 
-      // Nakon odabira people ili date -> refresh availability
+      // Nakon odabira people -> refresh availability
       if (cs.dataset.name === "people") {
         refreshAvailability();
-      }
-      if (cs.dataset.name === "time") {
-        // ništa
       }
     }
   });
@@ -75,8 +76,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ====== Availability (populate TIME custom dropdown from backend) ======
-  const peopleHidden = document.getElementById("people"); // hidden input
-  const timeHidden = document.getElementById("time");     // hidden input
+  const peopleHidden = document.getElementById("people"); // mora biti hidden input od people cselecta
+  const timeHidden = document.getElementById("time");     // mora biti hidden input od time cselecta
 
   const timeCSelect = document.querySelector('.cselect[data-name="time"]');
   const timeList = timeCSelect?.querySelector(".cselect-list");
@@ -86,6 +87,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (timeHidden) timeHidden.value = "";
     if (timeValueSpan) timeValueSpan.textContent = "Odaberi";
     if (timeCSelect) timeCSelect.querySelectorAll(".cselect-opt").forEach(o => o.classList.remove("selected"));
+  }
+
+  // Ako je user već imao odabran termin, a više nije dostupan -> reset
+  function ensureTimeStillValid(availableTimes) {
+    const current = timeHidden?.value || "";
+    if (!current) return;
+    if (!availableTimes.includes(current)) {
+      resetTimeUI();
+    }
   }
 
   function renderTimeOptions(times) {
@@ -99,6 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
       li.textContent = "Nema slobodnih termina";
       li.style.opacity = "0.7";
       li.style.pointerEvents = "none";
+      li.dataset.disabled = "1";
       timeList.appendChild(li);
     } else {
       for (const t of times) {
@@ -111,7 +122,9 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    resetTimeUI();
+    // Ne resetiramo bezveze ako je odabrani time i dalje validan
+    ensureTimeStillValid(times || []);
+    if (!timeHidden?.value) resetTimeUI();
   }
 
   async function refreshAvailability() {
@@ -126,12 +139,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const r = await fetch(
-        `${API_BASE}/availability?date=${encodeURIComponent(date)}&people=${encodeURIComponent(people)}`
+        `${API_BASE}/availability?date=${encodeURIComponent(date)}&people=${encodeURIComponent(people)}`,
+        { cache: "no-store" }
       );
       const data = await r.json();
-
       if (!r.ok) throw new Error(data?.error || "Greška");
-      renderTimeOptions(data.available || []);
+
+      const available = data.available || [];
+      renderTimeOptions(available);
+
+      // Ako je user imao odabrano vrijeme koje je nestalo, ovo ga resetira
+      ensureTimeStillValid(available);
+
     } catch (err) {
       console.error(err);
       renderTimeOptions([]);
@@ -174,9 +193,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const data = await r.json();
 
+      // Termin upravo popunjen (race condition)
       if (r.status === 409) {
         if (msg) msg.textContent = "Nažalost, termin je upravo popunjen. Odaberi drugi.";
+        resetTimeUI();
         await refreshAvailability();
+
+        // (opcionalno) odmah otvori dropdown s vremenima
+        const btn = timeCSelect?.querySelector(".cselect-btn");
+        if (timeCSelect && btn) {
+          timeCSelect.classList.add("open");
+          btn.setAttribute("aria-expanded", "true");
+        }
         return;
       }
 
@@ -190,6 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
         dateEl.value = todayStr;
         dateEl.min = todayStr;
       }
+
       if (peopleHidden) peopleHidden.value = "";
       resetTimeUI();
 
@@ -198,6 +227,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // očisti time listu dok opet ne odabere people
       renderTimeOptions([]);
+
     } catch (err) {
       console.error(err);
       if (msg) msg.textContent = "Greška pri slanju. Pokušaj ponovno.";

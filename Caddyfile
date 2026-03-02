@@ -1,0 +1,29 @@
+:80 {
+  log {
+    output stdout
+    format console
+  }
+
+  # 1) Admin API -> backend (s authom u Nodeu)
+  @adminApi path /admin/api/*
+  handle @adminApi {
+    reverse_proxy api:3001
+  }
+
+  # 2) Admin page -> backend
+  @adminPage path /admin_page
+  handle @adminPage {
+    reverse_proxy api:3001
+  }
+
+  # 3) General API under /api -> backend (strip prefix)
+  @api path /api/*
+  handle @api {
+    uri strip_prefix /api
+    reverse_proxy api:3001
+  }
+
+  # 4) Static frontend
+  root * /usr/share/caddy
+  file_server
+}

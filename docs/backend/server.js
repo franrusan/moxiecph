@@ -87,25 +87,28 @@ app.get("/availability", async (req, res) => {
 
     const sumByTime = new Map(rows.map(r => [r.t, Number(r.total)]));
 
-
     let available = ALL_SLOTS.filter((slot) => {
-    const slotBooked = sumByTime.get(slot) || 0;
-    if (slotBooked + ppl > MAX_PER_SLOT) return false;
+      // 1) limit po start slotu (max 30 u točno tom start terminu)
+      const slotBooked = sumByTime.get(slot) || 0;
+      if (slotBooked + ppl > MAX_PER_SLOT) return false;
 
-    const slotMin = timeToMinutes(slot);
-    const windowStart = slotMin - DURATION_MINUTES;
+      // 2) limit ukupno u restoranu u preklapajućem 2h prozoru (max 50)
+      const candStart = timeToMinutes(slot);
+      const candEnd = candStart + DURATION_MINUTES; // [candStart, candEnd)
 
-    // zbroji sve rezervacije koje su startale u (slot-120min, slot]
-    let windowBooked = 0;
-    for (const t of ALL_SLOTS) {
-        const m = timeToMinutes(t);
-        if (m > windowStart && m <= slotMin) {
-        windowBooked += (sumByTime.get(t) || 0);
-        }
-    }
+      let overlappingBooked = 0;
 
-    if (windowBooked + ppl > MAX_TOTAL) return false;
-    return true;
+      for (const t of ALL_SLOTS) {
+        const start = timeToMinutes(t);
+        const end = start + DURATION_MINUTES; // [start, end)
+
+        const overlaps = start < candEnd && end > candStart;
+        if (overlaps) overlappingBooked += (sumByTime.get(t) || 0);
+      }
+
+      if (overlappingBooked + ppl > MAX_TOTAL) return false;
+
+      return true;
     });
 
 
@@ -171,7 +174,24 @@ const q = await pool.query(
   }
 });
 
+app.get("/admin/api/stats", basicAuth, async (_req, res) => {
+  try {
+    const q = await pool.query(`
+      SELECT
+        EXTRACT(ISODOW FROM res_date)::int AS dow,       -- 1=Mon ... 7=Sun
+        to_char(res_time, 'HH24:MI') AS time,
+        COALESCE(SUM(people), 0)::int AS total_people
+      FROM reservations
+      GROUP BY dow, time
+      ORDER BY dow, time;
+    `);
 
+    res.json({ rows: q.rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 // 2) POST reservation
 app.post("/reservations", async (req, res) => {
   try {
@@ -205,8 +225,8 @@ app.post("/reservations", async (req, res) => {
         `SELECT COALESCE(SUM(people),0) AS total
         FROM reservations
         WHERE res_date = $1
-            AND res_time > ($2::time - make_interval(mins => $3))
-            AND res_time <= $2::time`,
+          AND res_time < ($2::time + make_interval(mins => $3))
+          AND (res_time + make_interval(mins => $3)) > $2::time`,
         [date, time, DURATION_MINUTES]
         );
         const winTotal = Number(winRes.rows[0].total);
@@ -252,6 +272,8 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3001, () => {
-  console.log(`API running on http://localhost:${process.env.PORT || 3001}`);
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`API running on http://0.0.0.0:${PORT}`);
 });

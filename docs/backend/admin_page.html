@@ -10,13 +10,48 @@
       background: radial-gradient(900px 600px at 30% 10%, rgba(242,201,76,.10), transparent 55%), rgba(255,255,255,.03);}
     h1{margin:0 0 10px;font-size:22px}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
-    input,button{height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.35);color:#eee;padding:0 12px}
-    button{cursor:pointer;border-color:rgba(242,201,76,.35)}
+    input,button{height:40px;border-radius:12px;border:1px solid rgba(242,201,76,.95);background:rgba(242,201,76,.35);color:#eee;padding:0 12px}
+    button{cursor:pointer;border-color:rgba(242,201,76,.95);background:rgba(242,201,76,.35)}
     table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:12px}
     th,td{padding:10px;border-bottom:1px solid rgba(255,255,255,.08);text-align:left;font-size:14px}
     th{color:rgba(242,201,76,.95);font-weight:600}
     .muted{opacity:.75}
     .pill{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid rgba(242,201,76,.25);background:rgba(242,201,76,.08)}
+    .pill:empty{visibility: hidden;}
+    .stats-card{
+      max-width:1200px;
+      margin:18px auto 0;
+      padding:18px;
+      border-radius:14px;
+      border:1px solid rgba(242,201,76,.18);
+      background: radial-gradient(900px 600px at 30% 10%, rgba(242,201,76,.10), transparent 55%), rgba(255,255,255,.03);
+    }
+
+    /* OVO je ključ: grid koji pravi 2 stupca */
+    .stats-grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr; /* 2 grafa jedan do drugog */
+      gap:14px;
+    }
+
+    .panel{
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.25);
+      padding:12px;
+    }
+
+    .panel-title{
+      margin:0 0 8px;
+      font-size:13px;
+      opacity:.85;
+    }
+
+    /* fiksna visina da nema “infinite grow” i da izgleda normalno */
+    .chart-wrap{
+      position: relative;
+      height: 260px;
+    }
   </style>
 </head>
 <body>
@@ -43,6 +78,34 @@
     </table>
   </div>
 
+<div class="stats-card">
+  <h1>Admin – Stats</h1>
+
+  <div class="row">
+    <span class="muted">Filter:</span>
+    <span id="filterState" class="pill"></span>
+    <button id="resetFilters">Reset</button>
+  </div>
+
+  <div class="stats-grid">
+    <div class="panel">
+      <div class="panel-title">Promet po danima u tjednu</div>
+      <div class="chart-wrap">
+        <canvas id="chartDow"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Promet po terminima (svakih 30 min)</div>
+      <div class="chart-wrap">
+        <canvas id="chartTime"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   const d = document.getElementById('d');
   const tb = document.getElementById('tb');
@@ -81,5 +144,174 @@
   }
 
   document.getElementById('load').addEventListener('click', load);
+  // ... tvoj postojeći kod za summary ...
+
+  // ====== STATS (2 interaktivna grafa) ======
+  const filterState = document.getElementById("filterState");
+  const resetBtn = document.getElementById("resetFilters");
+
+  const DOW_LABELS = ["Pon", "Uto", "Sri", "Čet", "Pet", "Sub", "Ned"]; // ISO 1..7
+
+  let statsGrid = [];              // [{ dow: 1..7, time:"17:00", total_people: 12 }, ...]
+  let selectedDow = null;          // 1..7
+  let selectedTime = null;         // "18:30"
+
+  let chartDow = null;
+  let chartTime = null;
+
+  const THEME_YELLOW = "rgba(242,201,76,0.9)";
+  const THEME_YELLOW_SOFT = "rgba(242,201,76,0.25)";
+  const GRID = "rgba(255,255,255,0.08)";
+  const TICK = "rgba(255,255,255,0.75)";
+
+  const commonChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        enabled: true,
+        displayColors: false,
+        callbacks: {
+          label: (ctx) => ` ${ctx.raw} ljudi`
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: TICK },
+        grid: { color: "rgba(0,0,0,0)" }
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { color: TICK },
+        grid: { color: GRID }
+      }
+    }
+  };
+
+  function setFilterBadge() {
+    const parts = [];
+    if (selectedDow) parts.push(`Dan: ${DOW_LABELS[selectedDow - 1]}`);
+    if (selectedTime) parts.push(`Termin: ${selectedTime}`);
+    filterState.textContent = parts.length ? parts.join(" | ") : "Nema filtera";
+  }
+
+  function computeTotals({ dow = null, time = null } = {}) {
+    // Filtriraj grid prema odabirima
+    const filtered = statsGrid.filter(r => {
+      if (dow && Number(r.dow) !== dow) return false;
+      if (time && r.time !== time) return false;
+      return true;
+    });
+
+    // 1) Totali po danima (1..7)
+    const byDow = Array(7).fill(0);
+    for (const r of filtered) {
+      byDow[Number(r.dow) - 1] += Number(r.total_people);
+    }
+
+    // 2) Totali po terminima (sortirano po vremenu)
+    const mapTime = new Map(); // time -> total
+    for (const r of filtered) {
+      mapTime.set(r.time, (mapTime.get(r.time) || 0) + Number(r.total_people));
+    }
+
+    const times = Array.from(mapTime.keys()).sort(); // "17:00", "17:30", ...
+    const byTime = times.map(t => mapTime.get(t));
+
+    return { byDow, times, byTime };
+  }
+
+  function renderCharts() {
+    setFilterBadge();
+
+    // Za "Promet po danima": filtriraj po selectedTime (ako je odabran termin)
+    const dowData = computeTotals({ time: selectedTime });
+    // Za "Promet po terminima": filtriraj po selectedDow (ako je odabran dan)
+    const timeData = computeTotals({ dow: selectedDow });
+
+    // Chart 1: DOW
+    const ctxDow = document.getElementById("chartDow").getContext("2d");
+    if (chartDow) chartDow.destroy();
+    chartDow = new Chart(ctxDow, {
+      type: "bar",
+      data: {
+        labels: DOW_LABELS,
+        datasets: [{
+          label: "Ukupno ljudi",
+          data: dowData.byDow,
+          backgroundColor: THEME_YELLOW,
+          hoverBackgroundColor: "rgba(242,201,76,1)",
+          borderColor: THEME_YELLOW_SOFT,
+          borderWidth: 1,
+          borderRadius: 10
+        }]
+      },
+    options: {
+      ...commonChartOptions,
+      onClick: (_evt, elements) => {
+        if (!elements?.length) return;
+        const idx = elements[0].index;
+        const dow = idx + 1;
+
+        selectedDow = (selectedDow === dow) ? null : dow;
+        renderCharts();
+      }
+    }
+    });
+
+    // Chart 2: TIME
+    const ctxTime = document.getElementById("chartTime").getContext("2d");
+    if (chartTime) chartTime.destroy();
+    chartTime = new Chart(ctxTime, {
+      type: "bar",
+      data: {
+        labels: timeData.times,
+        datasets: [{
+          label: "Ukupno ljudi",
+          data: timeData.byTime,
+          backgroundColor: THEME_YELLOW,
+          hoverBackgroundColor: "rgba(242,201,76,1)",
+          borderColor: THEME_YELLOW_SOFT,
+          borderWidth: 1,
+          borderRadius: 10
+        }]
+      },
+    options: {
+      ...commonChartOptions,
+      onClick: (_evt, elements) => {
+        if (!elements?.length) return;
+        const idx = elements[0].index;
+        const time = timeData.times[idx];
+        selectedTime = (selectedTime === time) ? null : time;
+        renderCharts();
+      }
+    }
+    });
+  }
+
+  async function loadStats() {
+    // Ako ti admin page dolazi s backenda (/admin_page), onda može ostati bez /api prefiksa:
+    // const r = await fetch(`/admin/api/stats`, { cache: "no-store" });
+
+    // Ako ti admin page dolazi kao statika iz docs, koristi /api:
+    const r = await fetch(`/admin/api/stats`, { cache: "no-store" });
+
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.error || "Stats error");
+
+    statsGrid = data.rows || [];
+    renderCharts();
+  }
+
+  resetBtn?.addEventListener("click", () => {
+    selectedDow = null;
+    selectedTime = null;
+    renderCharts();
+  });
+
+  // učitaj stats odmah kad se otvori admin
+  loadStats().catch(err => console.error(err));
 </script>
 
