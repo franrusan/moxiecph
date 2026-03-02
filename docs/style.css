@@ -1254,26 +1254,20 @@ footer{
 
 .date-wrap{
   position: relative;
-  width: 100%
+  width: 100%;
+  cursor: pointer;            /* cijeli wrap izgleda klikabilno */
 }
 
-.date-wrap input{
+.date-wrap input[type="date"]{
   width: 100%;
   cursor: pointer;
-  padding-right: 44px; /* mjesta za ikonu */
+  padding-right: 44px;        /* mjesta za ikonu */
+  text-align: left;           /* tekst lijevo */
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-/* vidljiva "ikona" desno */
-.date-icon{
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none; /* da klik ide na input */
-  opacity: 0.9;
-}
-
-/* pokušaj sakriti native calendar ikonice (Safari/Chrome iOS) */
+/* sakrij native calendar ikonu (koliko browser dopusti) */
 .date-wrap input[type="date"]::-webkit-calendar-picker-indicator{
   opacity: 0;
   position: absolute;
@@ -1283,21 +1277,14 @@ footer{
   pointer-events: none;
 }
 
-/* iOS zna dodati unutarnje paddinge/appearance */
-.date-wrap input[type="date"]{
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* tvoja ikona da bude klikabilna */
+/* tvoja ikona desno, ali klik ide na input */
 .date-icon{
   position: absolute;
   right: 14px;
   top: 50%;
   transform: translateY(-50%);
   opacity: .9;
-  pointer-events: auto; /* BITNO: neka bude klikabilna */
-  cursor: pointer;
+  pointer-events: none;       /* BITNO: klik prolazi kroz ikonu */
   user-select: none;
 }
 
