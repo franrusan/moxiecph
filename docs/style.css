@@ -1254,6 +1254,7 @@ footer{
 
 .date-wrap{
   position: relative;
+  width: 100%
 }
 
 .date-wrap input{
@@ -1270,6 +1271,34 @@ footer{
   transform: translateY(-50%);
   pointer-events: none; /* da klik ide na input */
   opacity: 0.9;
+}
+
+/* pokušaj sakriti native calendar ikonice (Safari/Chrome iOS) */
+.date-wrap input[type="date"]::-webkit-calendar-picker-indicator{
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+/* iOS zna dodati unutarnje paddinge/appearance */
+.date-wrap input[type="date"]{
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* tvoja ikona da bude klikabilna */
+.date-icon{
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: .9;
+  pointer-events: auto; /* BITNO: neka bude klikabilna */
+  cursor: pointer;
+  user-select: none;
 }
 
 /* ===== Custom Select (dark glass + gold) ===== */

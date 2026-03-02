@@ -162,6 +162,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Po defaultu: dok ne odabereš people, time neka bude prazno
   renderTimeOptions([]);
 
+  const dateIcon = document.querySelector(".date-wrap .date-icon");
+
+  function openDatePicker() {
+    if (!dateEl) return;
+    // showPicker radi u nekim browserima; na iOS često fokus/tap otvara
+    if (dateEl.showPicker) dateEl.showPicker();
+    else dateEl.focus();
+  }
+
+  dateIcon?.addEventListener("click", openDatePicker);
+  dateIcon?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") openDatePicker();
+  });
+
   // ====== Submit -> POST /reservations ======
   const form = document.getElementById("reserveForm");
   const msg = document.getElementById("reserveMsg");
