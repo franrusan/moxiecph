@@ -1,0 +1,10 @@
+# env
+.env
+**/.env
+
+# node
+node_modules/
+**/node_modules/
+
+# optional: dumps / local files
+*.sql
