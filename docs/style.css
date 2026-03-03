@@ -126,6 +126,7 @@ button{ font:inherit; }
   font-optical-sizing: auto;
   font-weight: 600;
   font-style: normal;
+  padding-top: 5px;
 }
 
 /* Header menu */
@@ -135,6 +136,7 @@ button{ font:inherit; }
   display: flex;
   align-items: center;
   gap: 10px;
+  padding-top: 5px;
 }
 
 .hamburger{
@@ -371,15 +373,7 @@ h1,h2{ font-family:"Playfair Display", serif; margin:0; }
 /* =========================
    MENU (center list only)
    ========================= */
-.menu-wrap2{ display:flex; justify-content:center; }
-.menu-panel{
-  width: min(760px, 100%);
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(0,0,0,0.18);
-  border-radius: 18px;
-  padding: 16px;
-  overflow: hidden;
-}
+
 .menu-cat-title{
   font-family:"Playfair Display", serif;
   font-size: 26px;
@@ -1284,7 +1278,7 @@ footer{
 .date-wrap input[type="date"]::-webkit-calendar-picker-indicator{
   opacity: 0;
   position: absolute;
-  left: 0;
+  right: 0;
   width: 1px;
   height: 1px;
   pointer-events: none;
@@ -1393,11 +1387,17 @@ footer{
     padding: 18px 14px;
     padding-bottom: calc(22px + env(safe-area-inset-bottom));
   }
-  .form-grid{ grid-template-columns: 1fr; }
+  .form-grid{
+    grid-template-columns: 1fr;
+  }
 
   /* Header */
   :root{ --headerH: 62px; }
-  .site-header{ height: var(--headerH); }
+  .site-header{  
+    height: var(--headerH);   
+    padding-top: 60px;                 /* visina žute trake */
+    box-sizing: border-box;
+  }
 
   .header-inner{
     grid-template-columns: 1fr auto 1fr;
@@ -1408,8 +1408,8 @@ footer{
     font-size: 20px;
     line-height: 1;
     pointer-events: none;
+    padding-top: 5px;
   }
-
   /* CTA u headeru = samo ikona na mobitelu */
   .btn-104.header-cta{
     width: 44px;
