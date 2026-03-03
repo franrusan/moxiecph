@@ -1268,10 +1268,18 @@ footer{
 .date-wrap input[type="date"]{
   width: 100%;
   cursor: pointer;
-  padding-right: 44px;        /* mjesta za ikonu */
-  text-align: left;           /* tekst lijevo */
+  padding-right: 44px;
+  text-align: left;
   -webkit-appearance: none;
   appearance: none;
+}
+
+/* iOS Safari: vrati native layout (sprječava centriranje) */
+@supports (-webkit-touch-callout: none){
+  .date-wrap input[type="date"]{
+    -webkit-appearance: auto;
+    appearance: auto;
+  }
 }
 
 /* sakrij native calendar ikonu (koliko browser dopusti) */
