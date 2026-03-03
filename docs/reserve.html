@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Inter:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
+  <script src="stranice.js" defer></script>
 </head>
 
 <body class="reserve-page">
@@ -22,7 +23,14 @@
       <div></div>
       <a class="brand" href="index.html">Moxiecph</a>
       <div class="menu-wrap">
-        <a class="btn-104 header-cta" href="index.html" data-icon="🏠"><span>Home</span></a>
+        <button class="hamburger" id="menuBtn" aria-label="Izbornik" aria-expanded="false">
+          <span class="ham-lines" aria-hidden="true"><span></span><span></span><span></span></span>
+        </button>
+
+        <nav class="dropdown" id="dropdown" aria-label="Navigacija">
+          <a href="index.html" class="dd">Početna <span class="chev">→</span></a>
+          <a href="menu.html" class="dd">Menu <span class="chev">→</span></a>
+        </nav>
       </div>
     </div>
   </header>

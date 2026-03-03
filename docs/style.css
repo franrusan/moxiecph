@@ -1415,7 +1415,7 @@ footer{
     padding-top: 5px;
   }
   /* CTA u headeru = samo ikona na mobitelu */
-  .btn-104.header-cta{
+  .btn-104.header-cta.nodisplay{
     display: none;
   }
 
