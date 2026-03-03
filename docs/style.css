@@ -1394,9 +1394,7 @@ footer{
   /* Header */
   :root{ --headerH: 62px; }
   .site-header{  
-    height: var(--headerH);   
-    padding-top: 60px;                 /* visina žute trake */
-    box-sizing: border-box;
+    height: var(--headerH);
   }
 
   .header-inner{
