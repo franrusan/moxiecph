@@ -110,6 +110,7 @@
   const d = document.getElementById('d');
   const tb = document.getElementById('tb');
   const sum = document.getElementById('sum');
+  const API_BASE = "https://moxiecph.onrender.com";
 
   const now = new Date();
   const pad2 = (n)=>String(n).padStart(2,'0');
@@ -119,7 +120,7 @@
     tb.innerHTML = '<tr><td colspan="3" class="muted">Učitavam...</td></tr>';
     sum.textContent = '';
 
-    const r = await fetch(`/admin/api/summary?date=${encodeURIComponent(d.value)}`, { cache: 'no-store' });
+    const r = await fetch(`${API_BASE}/admin/api/summary?date=${encodeURIComponent(d.value)}`, { cache: "no-store" });
     const data = await r.json();
 
     if(!r.ok){
@@ -296,7 +297,7 @@
     // const r = await fetch(`/admin/api/stats`, { cache: "no-store" });
 
     // Ako ti admin page dolazi kao statika iz docs, koristi /api:
-    const r = await fetch(`/admin/api/stats`, { cache: "no-store" });
+    const r = await fetch(`${API_BASE}/admin/api/stats`, { cache: "no-store" });
 
     const data = await r.json();
     if (!r.ok) throw new Error(data?.error || "Stats error");
