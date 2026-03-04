@@ -1,6 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
   const API_BASE = "https://moxiecph.onrender.com";
-  console.log("API_BASE =", API_BASE);
 
   // ====== Date: default today + min today + show picker on click ======
   function pad2(n) { return String(n).padStart(2, "0"); }
@@ -137,9 +136,8 @@ document.addEventListener("DOMContentLoaded", () => {
       renderTimeOptions([]);
       return;
     }
+
     try {
-      console.log("API_BASE =", API_BASE);
-      console.log("FETCHING", `${API_BASE}/availability?date=${date}&people=${people}`);
       const r = await fetch(
         `${API_BASE}/availability?date=${encodeURIComponent(date)}&people=${encodeURIComponent(people)}`,
         { cache: "no-store" }
