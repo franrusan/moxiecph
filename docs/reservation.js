@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_BASE = "/api";
+  const API_BASE = "https://moxiecph.onrender.com/";
 
   // ====== Date: default today + min today + show picker on click ======
   function pad2(n) { return String(n).padStart(2, "0"); }

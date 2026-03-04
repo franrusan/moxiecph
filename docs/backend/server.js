@@ -3,7 +3,12 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const path = require("path");
+const cors = require("cors"); // ili import cors from "cors";
 
+app.use(cors({
+  origin: "https://moxiecph-front.onrender.com",
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+}));
 
 const app = express();
 app.use(cors()); // za dev; kasnije možeš ograničiti origin
