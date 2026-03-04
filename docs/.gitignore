@@ -6,5 +6,11 @@
 node_modules/
 **/node_modules/
 
-# optional: dumps / local files
+# local-only docker files
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile
+Dockerfile.*
+
+# optional: local dumps / sql (ako želiš ignorirati sve SQL)
 *.sql
