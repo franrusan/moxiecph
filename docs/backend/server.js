@@ -9,6 +9,7 @@ app.use(cors({
   methods: ["GET","POST","PUT","DELETE","OPTIONS"],
 }));
 
+const app = express();
 app.use(express.json());
 
 const pool = new Pool({
