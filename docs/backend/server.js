@@ -3,13 +3,13 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const path = require("path");
+const app = express();
 
 app.use(cors({
   origin: "https://moxiecph-front.onrender.com",
   methods: ["GET","POST","PUT","DELETE","OPTIONS"],
 }));
 
-const app = express();
 app.use(express.json());
 
 const pool = new Pool({
