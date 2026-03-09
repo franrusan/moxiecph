@@ -3,59 +3,79 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const path = require("path");
-const app = express();
 const helmet = require("helmet");
+const expressBasicAuth = require("express-basic-auth");
+const { body, query, validationResult } = require("express-validator");
+const rateLimit = require("express-rate-limit");
 
+// ─── App Setup ────────────────────────────────────────────────────────────────
+
+const app = express();
 app.set("trust proxy", 1);
 app.use(helmet());
-
 app.use(cors({
-  origin: "https://moxiecph-front.onrender.com",
-  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  origin: process.env.CORS_ORIGIN || "https://moxiecph-front.onrender.com",
+  methods: ["GET", "POST", "OPTIONS"],
 }));
-
 app.use(express.json());
+
+// ─── Database ─────────────────────────────────────────────────────────────────
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: true } : false,
 });
 
-const MAX_TOTAL = Number(process.env.MAX_TOTAL || 50);
-const MAX_PER_SLOT = Number(process.env.MAX_PER_SLOT || 30);
-const DURATION_MINUTES = Number(process.env.DURATION_MINUTES || 120);
+// ─── Config ───────────────────────────────────────────────────────────────────
 
-function basicAuth(req, res, next) {
-  const header = req.headers.authorization || "";
-  const [type, token] = header.split(" ");
+const MAX_TOTAL         = Number(process.env.MAX_TOTAL          || 50);
+const MAX_PER_SLOT      = Number(process.env.MAX_PER_SLOT       || 30);
+const DURATION_MINUTES  = Number(process.env.DURATION_MINUTES   || 120);
+const SLOT_START_HOUR   = Number(process.env.SLOT_START_HOUR    || 17);
+const SLOT_END_HOUR     = Number(process.env.SLOT_END_HOUR      || 23);
 
-  if (type !== "Basic" || !token) {
-    res.setHeader("WWW-Authenticate", 'Basic realm="Admin"');
-    return res.status(401).send("Auth required");
-  }
+// ─── Rate Limiting ────────────────────────────────────────────────────────────
 
-  const decoded = Buffer.from(token, "base64").toString("utf8");
-  const idx = decoded.indexOf(":");
-  const user = decoded.slice(0, idx);
-  const pass = decoded.slice(idx + 1);
+const reservationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: "Too many reservation attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-  if (user === process.env.ADMIN_USER && pass === process.env.ADMIN_PASS) {
-    return next();
-  }
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: "Too many requests. Please slow down." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-  res.setHeader("WWW-Authenticate", 'Basic realm="Admin"');
-  return res.status(401).send("Invalid credentials");
-}
+app.use("/availability", apiLimiter);
+app.use("/reservations", reservationLimiter);
 
-// Helper: generiraj slotove 17:00–23:00 svakih 30min
+// ─── Admin Auth ───────────────────────────────────────────────────────────────
+
+const adminAuth = expressBasicAuth({
+  users: { [process.env.ADMIN_USER]: process.env.ADMIN_PASS },
+  challenge: true,
+  realm: "Admin",
+});
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function generateSlots() {
   const slots = [];
-  for (let h = 17; h <= 23; h++) {
+  for (let h = SLOT_START_HOUR; h <= SLOT_END_HOUR; h++) {
     slots.push(`${String(h).padStart(2, "0")}:00`);
-    if (h !== 23) slots.push(`${String(h).padStart(2, "0")}:30`);
+    if (h !== SLOT_END_HOUR) slots.push(`${String(h).padStart(2, "0")}:30`);
   }
   return slots;
 }
+
 const ALL_SLOTS = generateSlots();
+const VALID_SLOT_SET = new Set(ALL_SLOTS);
 
 function timeToMinutes(t) {
   const [hh, mm] = t.split(":").map(Number);
@@ -66,186 +86,177 @@ function roundUpToNextHalfHour(minutes) {
   return Math.ceil(minutes / 30) * 30;
 }
 
-app.get("/admin_page", basicAuth, (req, res) => {
+function getTodayString() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function handleValidationErrors(req, res, next) {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ error: "Invalid input.", details: errors.array() });
+  }
+  next();
+}
+
+// ─── Routes ───────────────────────────────────────────────────────────────────
+
+// Admin page
+app.get("/admin_page", adminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "admin_page.html"));
 });
 
-// 1) GET available times
-// /availability?date=2026-02-18&people=4
-app.get("/availability", async (req, res) => {
+// Health check
+app.get("/health", async (_req, res) => {
   try {
-    const { date, people } = req.query;
-    const ppl = Number(people);
+    const r = await pool.query("SELECT 1 AS ok");
+    res.json({ ok: true, db: r.rows[0].ok === 1 });
+  } catch {
+    res.status(500).json({ ok: false });
+  }
+});
 
-    if (!date || !people || !Number.isFinite(ppl) || ppl < 1) {
-      return res.status(400).json({ error: "date i people su obavezni" });
-    }
+// GET /availability?date=YYYY-MM-DD&people=N
+app.get(
+  "/availability",
+  [
+    query("date")
+      .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .withMessage("date must be in YYYY-MM-DD format"),
+    query("people")
+      .isInt({ min: 1, max: MAX_PER_SLOT })
+      .withMessage(`people must be an integer between 1 and ${MAX_PER_SLOT}`),
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { date } = req.query;
+      const ppl = Number(req.query.people);
 
-    // Zbroji ljude po slotu za taj datum
-    const { rows } = await pool.query(
-    `
-    SELECT to_char(res_time, 'HH24:MI') AS t, COALESCE(SUM(people), 0) AS total
-    FROM reservations
-    WHERE res_date = $1
-    GROUP BY t
-    `,
-    [date]
-    );
+      const { rows } = await pool.query(
+        `SELECT to_char(res_time, 'HH24:MI') AS t, COALESCE(SUM(people), 0)::int AS total
+         FROM reservations
+         WHERE res_date = $1
+         GROUP BY t`,
+        [date]
+      );
 
-    const sumByTime = new Map(rows.map(r => [r.t, Number(r.total)]));
+      const sumByTime = new Map(rows.map(r => [r.t, r.total]));
 
-    let available = ALL_SLOTS.filter((slot) => {
-      // 1) limit po start slotu (max 30 u točno tom start terminu)
-      const slotBooked = sumByTime.get(slot) || 0;
-      if (slotBooked + ppl > MAX_PER_SLOT) return false;
+      let available = ALL_SLOTS.filter((slot) => {
+        const slotBooked = sumByTime.get(slot) || 0;
+        if (slotBooked + ppl > MAX_PER_SLOT) return false;
 
-      // 2) limit ukupno u restoranu u preklapajućem 2h prozoru (max 50)
-      const candStart = timeToMinutes(slot);
-      const candEnd = candStart + DURATION_MINUTES; // [candStart, candEnd)
+        const candStart = timeToMinutes(slot);
+        const candEnd = candStart + DURATION_MINUTES;
 
-      let overlappingBooked = 0;
+        let overlappingBooked = 0;
+        for (const t of ALL_SLOTS) {
+          const start = timeToMinutes(t);
+          const end = start + DURATION_MINUTES;
+          if (start < candEnd && end > candStart) {
+            overlappingBooked += sumByTime.get(t) || 0;
+          }
+        }
 
-      for (const t of ALL_SLOTS) {
-        const start = timeToMinutes(t);
-        const end = start + DURATION_MINUTES; // [start, end)
+        return overlappingBooked + ppl <= MAX_TOTAL;
+      });
 
-        const overlaps = start < candEnd && end > candStart;
-        if (overlaps) overlappingBooked += (sumByTime.get(t) || 0);
+      // Filter out past slots if booking for today
+      if (date === getTodayString()) {
+        const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const cutoff = roundUpToNextHalfHour(nowMinutes);
+        available = available.filter(t => timeToMinutes(t) >= cutoff);
       }
 
-      if (overlappingBooked + ppl > MAX_TOTAL) return false;
-
-      return true;
-    });
-
-
-        // --- sakrij prošla vremena ako je odabrani datum danas ---
-    // --- sakrij prošla vremena ako je odabrani datum danas ---
-const now = new Date();
-const todayStr =
-  `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
-
-if (date === todayStr) {
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const cutoff = roundUpToNextHalfHour(nowMinutes); // npr. 20:10 -> 20:30
-  available = available.filter(t => timeToMinutes(t) >= cutoff);
-}
-
-// jedini response
-return res.json({
-  date,
-  people: ppl,
-  maxPerSlot: MAX_PER_SLOT,
-  maxTotal: MAX_TOTAL,
-  durationMinutes: DURATION_MINUTES,
-  available
-});
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+      return res.json({
+        date,
+        people: ppl,
+        maxPerSlot: MAX_PER_SLOT,
+        maxTotal: MAX_TOTAL,
+        durationMinutes: DURATION_MINUTES,
+        available,
+      });
+    } catch (err) {
+      console.error("GET /availability error:", err);
+      res.status(500).json({ error: "Server error" });
+    }
   }
-});
-
-app.get("/admin/api/summary", basicAuth, async (req, res) => {
-  try {
-    const { date } = req.query;
-    if (!date) return res.status(400).json({ error: "date is required" });
-
-const q = await pool.query(
-  `
-  SELECT
-    to_char(res_time, 'HH24:MI') AS time,
-    COALESCE(SUM(people), 0)::int AS total_people,
-    COALESCE(
-      string_agg(
-        (people::text || ' (' || first_name || ' ' || last_name || ')'),
-        ', ' ORDER BY created_at
-      ),
-      ''
-    ) AS parties
-  FROM reservations
-  WHERE res_date = $1
-  GROUP BY time
-  ORDER BY time;
-  `,
-  [date]
 );
 
+// POST /reservations
+app.post(
+  "/reservations",
+  [
+    body("firstName")
+      .trim()
+      .notEmpty()
+      .isLength({ max: 100 })
+      .withMessage("firstName is required (max 100 chars)"),
+    body("lastName")
+      .trim()
+      .notEmpty()
+      .isLength({ max: 100 })
+      .withMessage("lastName is required (max 100 chars)"),
+    body("email")
+      .trim()
+      .isEmail()
+      .normalizeEmail()
+      .withMessage("A valid email address is required"),
+    body("people")
+      .isInt({ min: 1, max: MAX_PER_SLOT })
+      .withMessage(`people must be between 1 and ${MAX_PER_SLOT}`),
+    body("date")
+      .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .withMessage("date must be in YYYY-MM-DD format"),
+    body("time")
+      .custom(val => VALID_SLOT_SET.has(val))
+      .withMessage("time must be a valid reservation slot"),
+  ],
+  handleValidationErrors,
+  async (req, res) => {
+    const { firstName, lastName, email, date, time } = req.body;
+    const ppl = Number(req.body.people);
 
-    const totalPeople = q.rows.reduce((acc, r) => acc + Number(r.total_people), 0);
-    res.json({ date, totalPeople, rows: q.rows });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.get("/admin/api/stats", basicAuth, async (_req, res) => {
-  try {
-    const q = await pool.query(`
-      SELECT
-        EXTRACT(ISODOW FROM res_date)::int AS dow,       -- 1=Mon ... 7=Sun
-        to_char(res_time, 'HH24:MI') AS time,
-        COALESCE(SUM(people), 0)::int AS total_people
-      FROM reservations
-      GROUP BY dow, time
-      ORDER BY dow, time;
-    `);
-
-    res.json({ rows: q.rows });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-// 2) POST reservation
-app.post("/reservations", async (req, res) => {
-  try {
-    const { firstName, lastName, email, people, date, time } = req.body;
-
-    const ppl = Number(people);
-    if (!firstName || !lastName || !email || !date || !time || !Number.isFinite(ppl)) {
-      return res.status(400).json({ error: "Nedostaju polja" });
-    }
-
-    // 2a) Provjeri kapacitet za taj slot (transaction-safe)
-    // Najjednostavnije (za start): SERIALIZABLE transakcija
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
       await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
+      // Check per-slot capacity
       const slotRes = await client.query(
-        `SELECT COALESCE(SUM(people),0) AS total
-        FROM reservations
-        WHERE res_date = $1 AND res_time = $2::time`,
+        `SELECT COALESCE(SUM(people), 0)::int AS total
+         FROM reservations
+         WHERE res_date = $1 AND res_time = $2::time`,
         [date, time]
-        );
-        const slotTotal = Number(slotRes.rows[0].total);
-        if (slotTotal + ppl > MAX_PER_SLOT) {
+      );
+      if (slotRes.rows[0].total + ppl > MAX_PER_SLOT) {
         await client.query("ROLLBACK");
-        return res.status(409).json({ error: "Slot je pun (max 30)" });
-        }
+        return res.status(409).json({ error: `This time slot is full (max ${MAX_PER_SLOT} guests).` });
+      }
 
+      // Check restaurant-wide overlapping window capacity
       const winRes = await client.query(
-        `SELECT COALESCE(SUM(people),0) AS total
-        FROM reservations
-        WHERE res_date = $1
-          AND res_time < ($2::time + make_interval(mins => $3))
-          AND (res_time + make_interval(mins => $3)) > $2::time`,
+        `SELECT COALESCE(SUM(people), 0)::int AS total
+         FROM reservations
+         WHERE res_date = $1
+           AND res_time < ($2::time + make_interval(mins => $3))
+           AND (res_time + make_interval(mins => $3)) > $2::time`,
         [date, time, DURATION_MINUTES]
-        );
-        const winTotal = Number(winRes.rows[0].total);
-
-        if (winTotal + ppl > MAX_TOTAL) {
+      );
+      if (winRes.rows[0].total + ppl > MAX_TOTAL) {
         await client.query("ROLLBACK");
-        return res.status(409).json({ error: "Restoran je pun (max 50 u tom periodu)" });
-        }
-      // 2b) Insert
+        return res.status(409).json({ error: `The restaurant is fully booked during this period (max ${MAX_TOTAL} guests).` });
+      }
+
       const ins = await client.query(
         `INSERT INTO reservations (first_name, last_name, email, people, res_date, res_time)
-         VALUES ($1,$2,$3,$4,$5,$6::time)
+         VALUES ($1, $2, $3, $4, $5, $6::time)
          RETURNING id, created_at`,
         [firstName, lastName, email, ppl, date, time]
       );
@@ -256,31 +267,87 @@ app.post("/reservations", async (req, res) => {
         reservationId: ins.rows[0].id,
         createdAt: ins.rows[0].created_at,
       });
-    } catch (e) {
+    } catch (err) {
       await client.query("ROLLBACK");
-      // SERIALIZABLE može baciti conflict -> probaj ponovno (za sad samo javimo)
-      console.error(e);
-      return res.status(500).json({ error: "Neuspjelo spremanje" });
+
+      // Postgres serialization failure — safe to retry
+      if (err.code === "40001") {
+        return res.status(409).json({
+          error: "Booking conflict detected. Please try again.",
+          retryable: true,
+        });
+      }
+
+      console.error("POST /reservations error:", err);
+      return res.status(500).json({ error: "Failed to save reservation." });
     } finally {
       client.release();
     }
+  }
+);
+
+// GET /admin/api/summary?date=YYYY-MM-DD
+app.get("/admin/api/summary", adminAuth, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: "date is required (YYYY-MM-DD)" });
+    }
+
+    const q = await pool.query(
+      `SELECT
+         to_char(res_time, 'HH24:MI') AS time,
+         COALESCE(SUM(people), 0)::int AS total_people,
+         COALESCE(
+           string_agg(
+             (people::text || ' (' || first_name || ' ' || last_name || ')'),
+             ', ' ORDER BY created_at
+           ),
+           ''
+         ) AS parties
+       FROM reservations
+       WHERE res_date = $1
+       GROUP BY time
+       ORDER BY time`,
+      [date]
+    );
+
+    const totalPeople = q.rows.reduce((acc, r) => acc + r.total_people, 0);
+    res.json({ date, totalPeople, rows: q.rows });
   } catch (err) {
-    console.error(err);
+    console.error("GET /admin/api/summary error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-app.get("/health", async (_req, res) => {
+// GET /admin/api/stats
+app.get("/admin/api/stats", adminAuth, async (_req, res) => {
   try {
-    const r = await pool.query("SELECT 1 AS ok");
-    res.json({ ok: true, db: r.rows[0].ok === 1 });
-  } catch {
-    res.status(500).json({ ok: false });
+    const q = await pool.query(
+      `SELECT
+         EXTRACT(ISODOW FROM res_date)::int AS dow,
+         to_char(res_time, 'HH24:MI') AS time,
+         COALESCE(SUM(people), 0)::int AS total_people
+       FROM reservations
+       GROUP BY dow, time
+       ORDER BY dow, time`
+    );
+    res.json({ rows: q.rows });
+  } catch (err) {
+    console.error("GET /admin/api/stats error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-const PORT = process.env.PORT || 3001;
+// ─── 404 catch-all ────────────────────────────────────────────────────────────
 
+app.use((_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API running on http://0.0.0.0:${PORT}`);
 });

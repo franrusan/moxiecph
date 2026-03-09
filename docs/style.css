@@ -791,10 +791,6 @@ footer{
   color: rgba(22,18,12,.92);
 }
 
-.paper .item{
-  background: rgba(255,255,255,.38);
-  border: 1px solid rgba(0,0,0,.10);
-}
 .paper .item p{ color: var(--paper-muted); }
 .paper .item:hover{ background: rgba(255,255,255,.50); }
 
