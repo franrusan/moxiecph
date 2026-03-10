@@ -821,6 +821,10 @@ footer {
     inset: auto !important;
     padding-bottom: 20px;
   }
+  .menu-book {
+    width: calc(100vw - 20px);
+    margin: 0 auto;
+  }
   .back { display: none; }
   #page-drinks:checked ~ .book .front { display: none; }
   #page-drinks:checked ~ .book .back  { display: block; }
