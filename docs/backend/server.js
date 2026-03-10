@@ -623,7 +623,6 @@ app.delete("/admin/api/reservations/:id", adminAuth, async (req, res) => {
 app.post("/admin/api/reservations", adminAuth, [
   body("firstName").trim().notEmpty().isLength({ max: 100 }),
   body("lastName").trim().notEmpty().isLength({ max: 100 }),
-  body("email").trim().isEmail().normalizeEmail(),
   body("people").isInt({ min: 1, max: 100 }),
   body("date").matches(/^\d{4}-\d{2}-\d{2}$/),
   body("time").custom(val => VALID_SLOT_SET.has(val)).withMessage("Invalid time slot"),
