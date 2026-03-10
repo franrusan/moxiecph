@@ -562,6 +562,59 @@ app.delete("/admin/api/categories/:id", adminAuth, async (req, res) => {
   }
 });
 
+// GET /admin/api/reservations/:id
+app.get("/admin/api/reservations/:id", adminAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, first_name, last_name, email, people,
+              res_date::text AS res_date,
+              to_char(res_time, 'HH24:MI') AS res_time
+       FROM reservations WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("GET /admin/api/reservations/:id error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT /admin/api/reservations/:id
+app.put("/admin/api/reservations/:id", adminAuth, [
+  body("people").isInt({ min: 1, max: 30 }),
+  body("res_date").matches(/^\d{4}-\d{2}-\d{2}$/),
+  body("res_time").custom(val => VALID_SLOT_SET.has(val)),
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { people, res_date, res_time } = req.body;
+    const { rows } = await pool.query(
+      `UPDATE reservations SET people=$1, res_date=$2, res_time=$3::time
+       WHERE id=$4 RETURNING id`,
+      [people, res_date, res_time, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("PUT /admin/api/reservations/:id error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// DELETE /admin/api/reservations/:id
+app.delete("/admin/api/reservations/:id", adminAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "DELETE FROM reservations WHERE id=$1 RETURNING id", [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /admin/api/reservations/:id error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ─── 404 ──────────────────────────────────────────────────────────────────────
 
 app.use((_req, res) => {
