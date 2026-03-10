@@ -499,7 +499,7 @@ footer {
   margin: 4px 6px 14px;
   font-size: 34px;
   text-align: center;
-  color: var(--paper-ink);
+  color: var(--text);
 }
 .paper .menu-cat-title {
   color: var(--paper-ink);
@@ -800,7 +800,7 @@ footer {
     border-radius: 18px !important;
     padding-bottom: calc(26px + env(safe-area-inset-bottom)) !important;
   }
-  .paper-title      { font-size: 30px; color: var(--accent); }
+  .paper-title      { font-size: 30px; }
   .menu-cat-title   { font-size: 28px; margin: 18px 0 10px; }
 
   .item-img { width: 56px; height: 56px; flex: 0 0 56px; border-radius: 12px; }
