@@ -718,6 +718,7 @@ footer {
 .date-wrap input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1) sepia(1) saturate(5) hue-rotate(5deg);
   cursor: pointer;
+  display: none;
 }
 .date-icon {
   position: absolute;
