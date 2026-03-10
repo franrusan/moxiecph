@@ -432,3 +432,193 @@ document.getElementById("categoryFormEl")?.addEventListener("submit", async (e) 
 });
 
 loadMenuAdmin();
+
+// ─── Reservation pills + modals ───────────────────────────────────────────────
+
+let currentResId = null;
+
+// Override loadSummary da renderira pill gumbe
+const _origLoadSummary = loadSummary;
+loadSummary = async function() {
+  tbody.innerHTML = `<tr><td colspan="3" class="muted loading-text">Učitavam…</td></tr>`;
+  sumPill.textContent = "";
+  const auth = getAuthHeader();
+  if (!auth) return;
+  try {
+    const r = await fetch(`/admin/api/summary?date=${encodeURIComponent(dateInput.value)}`, {
+      cache: "no-store", headers: { Authorization: auth },
+    });
+    const data = await r.json();
+    if (!r.ok) { tbody.innerHTML = `<tr><td colspan="3" class="muted">Greška: ${data.error || r.status}</td></tr>`; return; }
+    if (!data.rows.length) { tbody.innerHTML = `<tr><td colspan="3" class="muted">Nema rezervacija za taj datum.</td></tr>`; return; }
+    sumPill.textContent = `Ukupno: ${data.totalPeople} gostiju`;
+    tbody.innerHTML = data.rows.map(row => `
+      <tr>
+        <td>${row.time}</td>
+        <td>${row.total_people}</td>
+        <td class="pills-cell">${renderPills(row.parties_data)}</td>
+      </tr>`).join("");
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="muted">Greška pri dohvatu podataka.</td></tr>`;
+    console.error("loadSummary:", err);
+  }
+};
+
+function renderPills(partiesData) {
+  if (!partiesData) return "";
+  return partiesData.map(p =>
+    `<button class="res-pill" data-id="${p.id}">${p.people} (${p.first_name} ${p.last_name})</button>`
+  ).join("");
+}
+
+// Klik na pill
+document.addEventListener("click", async (e) => {
+  const pill = e.target.closest(".res-pill");
+  if (!pill) return;
+  const id = pill.dataset.id;
+  await openResModal(id);
+});
+
+async function openResModal(id) {
+  const auth = getAuthHeader();
+  if (!auth) return;
+  try {
+    const r = await fetch(`/admin/api/reservations/${id}`, { headers: { Authorization: auth } });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    currentResId = id;
+    document.getElementById("ri_name").textContent   = `${data.first_name} ${data.last_name}`;
+    document.getElementById("ri_email").textContent  = data.email;
+    document.getElementById("ri_date").textContent   = data.res_date;
+    document.getElementById("ri_time").textContent   = data.res_time;
+    document.getElementById("ri_people").textContent = data.people;
+    document.getElementById("resModal").style.display = "flex";
+  } catch (err) { alert("Greška: " + err.message); }
+}
+
+// Zatvori info modal
+document.getElementById("resModalClose")?.addEventListener("click", () => {
+  document.getElementById("resModal").style.display = "none";
+});
+document.getElementById("resModal")?.addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = "none";
+});
+
+// Otvori edit modal
+document.getElementById("resEditBtn")?.addEventListener("click", () => {
+  const date   = document.getElementById("ri_date").textContent;
+  const time   = document.getElementById("ri_time").textContent;
+  const people = document.getElementById("ri_people").textContent;
+  document.getElementById("re_date").value   = date;
+  document.getElementById("re_time").value   = time;
+  document.getElementById("re_people").value = people;
+  document.getElementById("resModal").style.display     = "none";
+  document.getElementById("resEditModal").style.display = "flex";
+});
+
+// Zatvori edit modal
+document.getElementById("resEditClose")?.addEventListener("click", () => {
+  document.getElementById("resEditModal").style.display = "none";
+});
+document.getElementById("resEditCancelBtn")?.addEventListener("click", () => {
+  document.getElementById("resEditModal").style.display = "none";
+});
+document.getElementById("resEditModal")?.addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = "none";
+});
+
+// Spremi izmjene
+document.getElementById("resSaveBtn")?.addEventListener("click", async () => {
+  const auth = getAuthHeader();
+  if (!auth || !currentResId) return;
+  const payload = {
+    people:   Number(document.getElementById("re_people").value),
+    res_date: document.getElementById("re_date").value,
+    res_time: document.getElementById("re_time").value,
+  };
+  try {
+    const r = await fetch(`/admin/api/reservations/${currentResId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
+    document.getElementById("resEditModal").style.display = "none";
+    await loadSummary();
+  } catch (err) { alert("Greška: " + err.message); }
+});
+
+// Obriši
+document.getElementById("resDeleteBtn")?.addEventListener("click", async () => {
+  if (!confirm("Obrisati ovu rezervaciju?")) return;
+  const auth = getAuthHeader();
+  if (!auth || !currentResId) return;
+  try {
+    const r = await fetch(`/admin/api/reservations/${currentResId}`, {
+      method: "DELETE",
+      headers: { Authorization: auth },
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
+    document.getElementById("resModal").style.display = "none";
+    await loadSummary();
+  } catch (err) { alert("Greška: " + err.message); }
+});
+
+// ─── Nova rezervacija (admin) ─────────────────────────────────────────────────
+
+document.getElementById("newResBtn")?.addEventListener("click", () => {
+  const form = document.getElementById("newResForm");
+  form.style.display = form.style.display === "none" ? "block" : "none";
+  document.getElementById("newResMsg").textContent = "";
+  document.getElementById("newResFormEl").reset();
+});
+
+document.getElementById("cancelNewRes")?.addEventListener("click", () => {
+  document.getElementById("newResForm").style.display = "none";
+  document.getElementById("newResMsg").textContent = "";
+});
+
+document.getElementById("newResFormEl")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const auth = getAuthHeader();
+  if (!auth) return;
+
+  const msg = document.getElementById("newResMsg");
+  msg.style.color = "#f88";
+  msg.textContent = "";
+
+  const payload = {
+    firstName: document.getElementById("nr_firstName").value.trim(),
+    lastName:  document.getElementById("nr_lastName").value.trim(),
+    email:     document.getElementById("nr_email").value.trim(),
+    people:    Number(document.getElementById("nr_people").value),
+    date:      document.getElementById("nr_date").value,
+    time:      document.getElementById("nr_time").value,
+  };
+
+  if (!payload.time) { msg.textContent = "Odaberi vrijeme."; return; }
+
+  try {
+    const r = await fetch("/admin/api/reservations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!r.ok) { msg.textContent = data.error || "Greška."; return; }
+
+    msg.style.color = "#8f8";
+    msg.textContent = "Rezervacija spremljena!";
+    document.getElementById("newResFormEl").reset();
+
+    // Ako je isti datum kao u filtru — osvježi tablicu
+    if (payload.date === dateInput?.value) await loadSummary();
+
+    setTimeout(() => {
+      document.getElementById("newResForm").style.display = "none";
+      msg.textContent = "";
+    }, 1500);
+  } catch (err) {
+    msg.textContent = "Greška: " + err.message;
+  }
+});

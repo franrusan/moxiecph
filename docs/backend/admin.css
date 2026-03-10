@@ -452,3 +452,165 @@ tbody tr:hover {
   .form-grid { grid-template-columns: 1fr; }
   #dishFields { grid-template-columns: 1fr !important; }
 }
+
+/* ─── Reservation pills ──────────────────────────────────── */
+
+.pills-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.res-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-soft);
+  background: rgba(242,201,76,0.10);
+  color: var(--gold-text);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+  height: auto;
+}
+.res-pill:hover {
+  background: rgba(242,201,76,0.25);
+  transform: scale(1.04);
+}
+
+/* ─── Reservation modals ─────────────────────────────────── */
+
+.res-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.res-modal {
+  background: #111;
+  border: 1px solid var(--gold-soft);
+  border-radius: 16px;
+  width: min(440px, 100%);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.7);
+  overflow: hidden;
+}
+
+.res-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--gold-soft);
+}
+
+.res-modal-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+
+.res-modal-close {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s;
+}
+.res-modal-close:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+
+.res-modal-body {
+  padding: 20px;
+}
+
+.res-info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.res-info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+}
+
+.res-info-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.res-info-value {
+  font-size: 13px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+}
+
+.res-modal-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.res-modal-actions button {
+  flex: 1;
+}
+
+.btn-danger-solid {
+  background: rgba(220,50,50,0.15) !important;
+  border-color: rgba(220,50,50,0.4) !important;
+  color: #f88 !important;
+}
+.btn-danger-solid:hover {
+  background: rgba(220,50,50,0.30) !important;
+}
+
+/* Form inputs inside modal */
+.res-modal-body .form-group input,
+.res-modal-body .form-group select {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.res-modal-body .form-group input:focus,
+.res-modal-body .form-group select:focus {
+  border-color: var(--gold-text);
+}
+.res-modal-body .form-group select option { background: #1a1a1a; }
+.res-modal-body .form-group label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
