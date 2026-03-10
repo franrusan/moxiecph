@@ -105,6 +105,104 @@ function handleValidationErrors(req, res, next) {
   next();
 }
 
+
+// ─── Shared booking logic ─────────────────────────────────────────────────────
+
+// Returns { available: [...slots] } for a given date/people combo.
+// skipTodayCutoff = true for admin (but we keep it false so admin also respects today cutoff)
+async function getAvailableSlots(date, ppl) {
+  const { rows } = await pool.query(
+    `SELECT to_char(res_time, 'HH24:MI') AS t, COALESCE(SUM(people), 0)::int AS total
+     FROM reservations
+     WHERE res_date = $1
+     GROUP BY t`,
+    [date]
+  );
+
+  const sumByTime = new Map(rows.map(r => [r.t, r.total]));
+
+  let available = ALL_SLOTS.filter((slot) => {
+    const slotBooked = sumByTime.get(slot) || 0;
+    if (slotBooked + ppl > MAX_PER_SLOT) return false;
+
+    const candStart = timeToMinutes(slot);
+    const candEnd = candStart + DURATION_MINUTES;
+
+    let overlappingBooked = 0;
+    for (const t of ALL_SLOTS) {
+      const start = timeToMinutes(t);
+      const end = start + DURATION_MINUTES;
+      if (start < candEnd && end > candStart) {
+        overlappingBooked += sumByTime.get(t) || 0;
+      }
+    }
+
+    return overlappingBooked + ppl <= MAX_TOTAL;
+  });
+
+  if (date === getTodayString()) {
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const cutoff = roundUpToNextHalfHour(nowMinutes);
+    available = available.filter(t => timeToMinutes(t) >= cutoff);
+  }
+
+  return available;
+}
+
+// Shared insert inside a serializable transaction — used by both public and admin routes.
+async function insertReservation(client, { firstName, lastName, email, people, date, time }) {
+  await client.query("BEGIN");
+  await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+
+  // Check slot capacity
+  const slotRes = await client.query(
+    `SELECT COALESCE(SUM(people), 0)::int AS total
+     FROM reservations
+     WHERE res_date = $1 AND res_time = $2::time`,
+    [date, time]
+  );
+  if (slotRes.rows[0].total + people > MAX_PER_SLOT) {
+    await client.query("ROLLBACK");
+    return { error: `Slot pun — max ${MAX_PER_SLOT} gostiju (trenutno: ${slotRes.rows[0].total}).`, status: 409 };
+  }
+
+  // Check 2-hour window capacity
+  const winRes = await client.query(
+    `SELECT COALESCE(SUM(people), 0)::int AS total
+     FROM reservations
+     WHERE res_date = $1
+       AND res_time < ($2::time + make_interval(mins => $3))
+       AND (res_time + make_interval(mins => $3)) > $2::time`,
+    [date, time, DURATION_MINUTES]
+  );
+  if (winRes.rows[0].total + people > MAX_TOTAL) {
+    await client.query("ROLLBACK");
+    return { error: `Restoran pun u tom periodu — max ${MAX_TOTAL} gostiju (trenutno: ${winRes.rows[0].total}).`, status: 409 };
+  }
+
+  // Check today cutoff
+  if (date === getTodayString()) {
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const cutoff = roundUpToNextHalfHour(nowMinutes);
+    if (timeToMinutes(time) < cutoff) {
+      await client.query("ROLLBACK");
+      return { error: "Taj termin je već prošao.", status: 409 };
+    }
+  }
+
+  const ins = await client.query(
+    `INSERT INTO reservations (first_name, last_name, email, people, res_date, res_time)
+     VALUES ($1, $2, $3, $4, $5, $6::time)
+     RETURNING id, created_at`,
+    [firstName, lastName, email, people, date, time]
+  );
+
+  await client.query("COMMIT");
+  return { ok: true, reservationId: ins.rows[0].id, createdAt: ins.rows[0].created_at };
+}
+
 // ─── Static Admin Files ───────────────────────────────────────────────────────
 
 // Serve admin.css and admin.js only to authenticated users
@@ -149,43 +247,7 @@ app.get(
     try {
       const { date } = req.query;
       const ppl = Number(req.query.people);
-
-      const { rows } = await pool.query(
-        `SELECT to_char(res_time, 'HH24:MI') AS t, COALESCE(SUM(people), 0)::int AS total
-         FROM reservations
-         WHERE res_date = $1
-         GROUP BY t`,
-        [date]
-      );
-
-      const sumByTime = new Map(rows.map(r => [r.t, r.total]));
-
-      let available = ALL_SLOTS.filter((slot) => {
-        const slotBooked = sumByTime.get(slot) || 0;
-        if (slotBooked + ppl > MAX_PER_SLOT) return false;
-
-        const candStart = timeToMinutes(slot);
-        const candEnd = candStart + DURATION_MINUTES;
-
-        let overlappingBooked = 0;
-        for (const t of ALL_SLOTS) {
-          const start = timeToMinutes(t);
-          const end = start + DURATION_MINUTES;
-          if (start < candEnd && end > candStart) {
-            overlappingBooked += sumByTime.get(t) || 0;
-          }
-        }
-
-        return overlappingBooked + ppl <= MAX_TOTAL;
-      });
-
-      if (date === getTodayString()) {
-        const now = new Date();
-        const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const cutoff = roundUpToNextHalfHour(nowMinutes);
-        available = available.filter(t => timeToMinutes(t) >= cutoff);
-      }
-
+      const available = await getAvailableSlots(date, ppl);
       return res.json({
         date,
         people: ppl,
@@ -216,51 +278,13 @@ app.post(
   async (req, res) => {
     const { firstName, lastName, email, date, time } = req.body;
     const ppl = Number(req.body.people);
-
     const client = await pool.connect();
     try {
-      await client.query("BEGIN");
-      await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
-
-      const slotRes = await client.query(
-        `SELECT COALESCE(SUM(people), 0)::int AS total
-         FROM reservations
-         WHERE res_date = $1 AND res_time = $2::time`,
-        [date, time]
-      );
-      if (slotRes.rows[0].total + ppl > MAX_PER_SLOT) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ error: `This time slot is full (max ${MAX_PER_SLOT} guests).` });
-      }
-
-      const winRes = await client.query(
-        `SELECT COALESCE(SUM(people), 0)::int AS total
-         FROM reservations
-         WHERE res_date = $1
-           AND res_time < ($2::time + make_interval(mins => $3))
-           AND (res_time + make_interval(mins => $3)) > $2::time`,
-        [date, time, DURATION_MINUTES]
-      );
-      if (winRes.rows[0].total + ppl > MAX_TOTAL) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ error: `The restaurant is fully booked during this period (max ${MAX_TOTAL} guests).` });
-      }
-
-      const ins = await client.query(
-        `INSERT INTO reservations (first_name, last_name, email, people, res_date, res_time)
-         VALUES ($1, $2, $3, $4, $5, $6::time)
-         RETURNING id, created_at`,
-        [firstName, lastName, email, ppl, date, time]
-      );
-
-      await client.query("COMMIT");
-      return res.status(201).json({
-        ok: true,
-        reservationId: ins.rows[0].id,
-        createdAt: ins.rows[0].created_at,
-      });
+      const result = await insertReservation(client, { firstName, lastName, email, people: ppl, date, time });
+      if (result.error) return res.status(result.status).json({ error: result.error });
+      return res.status(201).json(result);
     } catch (err) {
-      await client.query("ROLLBACK");
+      await client.query("ROLLBACK").catch(() => {});
       if (err.code === "40001") {
         return res.status(409).json({ error: "Booking conflict detected. Please try again.", retryable: true });
       }
@@ -619,28 +643,31 @@ app.delete("/admin/api/reservations/:id", adminAuth, async (req, res) => {
   }
 });
 
-// POST /admin/api/reservations — admin kreira rezervaciju bez provjere kapaciteta
+// POST /admin/api/reservations — admin kreira rezervaciju (ista logika kao gost)
 app.post("/admin/api/reservations", adminAuth, [
   body("firstName").trim().notEmpty().isLength({ max: 100 }),
   body("lastName").trim().notEmpty().isLength({ max: 100 }),
-  body("email").trim().isEmail().normalizeEmail(),
-  body("people").isInt({ min: 1, max: 100 }),
+  body("people").isInt({ min: 1, max: MAX_PER_SLOT }),
   body("date").matches(/^\d{4}-\d{2}-\d{2}$/),
   body("time").custom(val => VALID_SLOT_SET.has(val)).withMessage("Invalid time slot"),
 ], handleValidationErrors, async (req, res) => {
-  const { firstName, lastName, email, date, time } = req.body;
+  const { firstName, lastName, date, time } = req.body;
+  const email = req.body.email || "admin@moxiecph.com";
   const ppl = Number(req.body.people);
+  const client = await pool.connect();
   try {
-    const ins = await pool.query(
-      `INSERT INTO reservations (first_name, last_name, email, people, res_date, res_time)
-       VALUES ($1, $2, $3, $4, $5, $6::time)
-       RETURNING id, created_at`,
-      [firstName, lastName, email, ppl, date, time]
-    );
-    res.status(201).json({ ok: true, reservationId: ins.rows[0].id });
+    const result = await insertReservation(client, { firstName, lastName, email, people: ppl, date, time });
+    if (result.error) return res.status(result.status).json({ error: result.error });
+    return res.status(201).json(result);
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (err.code === "40001") {
+      return res.status(409).json({ error: "Konflikt, pokušaj ponovno.", retryable: true });
+    }
     console.error("POST /admin/api/reservations error:", err);
     res.status(500).json({ error: "Failed to save reservation." });
+  } finally {
+    client.release();
   }
 });
 
