@@ -499,6 +499,13 @@ footer {
   margin: 4px 6px 14px;
   font-size: 34px;
   text-align: center;
+  color: var(--paper-ink);
+}
+.reserve-title {
+  font-family: "Playfair Display", serif;
+  margin: 4px 6px 14px;
+  font-size: 34px;
+  text-align: center;
   color: var(--text);
 }
 .paper .menu-cat-title {
