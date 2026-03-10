@@ -257,3 +257,8 @@ tbody tr:hover {
   text-align: center;
   letter-spacing: 0.05em;
 }
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) sepia(1) saturate(5) hue-rotate(5deg);
+  cursor: pointer;
+}
