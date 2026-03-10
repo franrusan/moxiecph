@@ -284,13 +284,14 @@ app.get("/admin/api/summary", adminAuth, async (req, res) => {
       `SELECT
          to_char(res_time, 'HH24:MI') AS time,
          COALESCE(SUM(people), 0)::int AS total_people,
-         COALESCE(
-           string_agg(
-             (people::text || ' (' || first_name || ' ' || last_name || ')'),
-             ', ' ORDER BY created_at
-           ),
-           ''
-         ) AS parties
+         json_agg(
+           json_build_object(
+             'id', id,
+             'first_name', first_name,
+             'last_name', last_name,
+             'people', people
+           ) ORDER BY created_at
+         ) AS parties_data
        FROM reservations
        WHERE res_date = $1
        GROUP BY time
@@ -562,6 +563,9 @@ app.delete("/admin/api/categories/:id", adminAuth, async (req, res) => {
   }
 });
 
+
+// ─── Admin Reservations API ───────────────────────────────────────────────────
+
 // GET /admin/api/reservations/:id
 app.get("/admin/api/reservations/:id", adminAuth, async (req, res) => {
   try {
@@ -582,9 +586,9 @@ app.get("/admin/api/reservations/:id", adminAuth, async (req, res) => {
 
 // PUT /admin/api/reservations/:id
 app.put("/admin/api/reservations/:id", adminAuth, [
-  body("people").isInt({ min: 1, max: 30 }),
+  body("people").isInt({ min: 1, max: 100 }),
   body("res_date").matches(/^\d{4}-\d{2}-\d{2}$/),
-  body("res_time").custom(val => VALID_SLOT_SET.has(val)),
+  body("res_time").custom(val => VALID_SLOT_SET.has(val)).withMessage("Invalid time slot"),
 ], handleValidationErrors, async (req, res) => {
   try {
     const { people, res_date, res_time } = req.body;
@@ -612,6 +616,31 @@ app.delete("/admin/api/reservations/:id", adminAuth, async (req, res) => {
   } catch (err) {
     console.error("DELETE /admin/api/reservations/:id error:", err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST /admin/api/reservations — admin kreira rezervaciju bez provjere kapaciteta
+app.post("/admin/api/reservations", adminAuth, [
+  body("firstName").trim().notEmpty().isLength({ max: 100 }),
+  body("lastName").trim().notEmpty().isLength({ max: 100 }),
+  body("email").trim().isEmail().normalizeEmail(),
+  body("people").isInt({ min: 1, max: 100 }),
+  body("date").matches(/^\d{4}-\d{2}-\d{2}$/),
+  body("time").custom(val => VALID_SLOT_SET.has(val)).withMessage("Invalid time slot"),
+], handleValidationErrors, async (req, res) => {
+  const { firstName, lastName, email, date, time } = req.body;
+  const ppl = Number(req.body.people);
+  try {
+    const ins = await pool.query(
+      `INSERT INTO reservations (first_name, last_name, email, people, res_date, res_time)
+       VALUES ($1, $2, $3, $4, $5, $6::time)
+       RETURNING id, created_at`,
+      [firstName, lastName, email, ppl, date, time]
+    );
+    res.status(201).json({ ok: true, reservationId: ins.rows[0].id });
+  } catch (err) {
+    console.error("POST /admin/api/reservations error:", err);
+    res.status(500).json({ error: "Failed to save reservation." });
   }
 });
 
