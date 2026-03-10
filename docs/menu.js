@@ -1,93 +1,94 @@
-// menu.js (radi s data-key + #food/#drinks + closeModal/dishImg/dishDesc)
+// menu.js — vuče podatke iz /menu API-ja i dinamički renderira stavke
 
-// ===== Tabs animacija (Food/Drinks) =====
-const tabButtons = document.querySelectorAll('.tab-btn');
-const tabFood = document.getElementById('food');
-const tabDrinks = document.getElementById('drinks');
+// ─── Fetch i render menija ────────────────────────────────────────────────────
 
-let current = 'food';
-let busy = false;
+async function loadMenu() {
+  try {
+    const r = await fetch("https://moxiecph.onrender.com/menu");
+    if (!r.ok) throw new Error("Menu fetch failed");
+    const data = await r.json();
 
-function cleanClasses(el) {
-  if (!el) return;
-  el.classList.remove('enter-left', 'enter-right', 'exit-left', 'exit-right');
+    const foodCats  = data.categories.filter(c => c.type === "food");
+    const drinkCats = data.categories.filter(c => c.type === "drink");
+
+    renderPage("food",   foodCats);
+    renderPage("drinks", drinkCats);
+
+  } catch (err) {
+    console.error("loadMenu error:", err);
+  }
 }
 
-function switchTab(target) {
-  if (!tabFood || !tabDrinks) return;
-  if (busy || target === current) return;
-  busy = true;
+function renderPage(pageId, categories) {
+  // Pronađi <section class="paper front/back"> koji odgovara pageId
+  const paper = document.querySelector(
+    pageId === "food" ? ".paper.front" : ".paper.back"
+  );
+  if (!paper) return;
 
-  const fromEl = current === 'food' ? tabFood : tabDrinks;
-  const toEl   = target === 'food' ? tabFood : tabDrinks;
+  // Pronađi naslov i page-nav (zadrži ih)
+  const title   = paper.querySelector(".paper-title");
+  const pageNav = paper.querySelector(".page-nav");
 
-  // aktivni gumb
-  tabButtons.forEach(b => b.classList.toggle('is-active', b.dataset.tab === target));
+  // Obrisi stare kategorije (sve osim naslova i navigacije)
+  Array.from(paper.children).forEach(el => {
+    if (el !== title && el !== pageNav) el.remove();
+  });
 
-  const goingToDrinks = target === 'drinks';
-  const exitClass  = goingToDrinks ? 'exit-left'   : 'exit-right';
-  const enterClass = goingToDrinks ? 'enter-right' : 'enter-left';
+  // Dodaj kategorije i stavke
+  for (const cat of categories) {
+    const catEl = document.createElement("div");
+    catEl.className = "menu-cat";
+    catEl.innerHTML = `<div class="menu-cat-title">${cat.name}</div>`;
 
-  // EXIT
-  cleanClasses(fromEl);
-  fromEl.classList.add(exitClass);
+    for (const item of cat.items) {
+      const itemEl = document.createElement("div");
+      itemEl.className = "item";
+      itemEl.dataset.key = item.slug;
+      itemEl.innerHTML = `
+        <div class="item-img">
+          <img src="${item.photo_url || ""}" alt="${item.title}" loading="lazy">
+        </div>
+        <div class="item-body">
+          <div class="item-row">
+            <strong>${item.title}</strong>
+            <span class="price">${item.price}</span>
+          </div>
+          <p>${item.description || ""}</p>
+        </div>`;
+      catEl.appendChild(itemEl);
+    }
 
-  setTimeout(() => {
-    // sakrij stari
-    fromEl.classList.add('hidden');
-    cleanClasses(fromEl);
-
-    // pokaži novi (ENTER)
-    toEl.classList.remove('hidden');
-    cleanClasses(toEl);
-    toEl.classList.add(enterClass);
-
-    // force reflow
-    void toEl.offsetWidth;
-
-    requestAnimationFrame(() => {
-      cleanClasses(toEl);
-      busy = false;
-      current = target;
-    });
-  }, 500);
+    // Umetni prije page-nav
+    if (pageNav) paper.insertBefore(catEl, pageNav);
+    else paper.appendChild(catEl);
+  }
 }
 
-if (tabButtons.length) {
-  tabButtons.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
-}
+// ─── Klik na stavku → item.html ───────────────────────────────────────────────
 
-// ===== Modal (radi s closeModal/dishImg/dishDesc) =====
-const dishModal = document.getElementById('dishModal');
-const closeBtn = document.getElementById('closeModal');
-const dishTitle = document.getElementById('dishTitle');
-const dishImg = document.getElementById('dishImg');
-const dishDesc = document.getElementById('dishDesc');
-const dishIngredients = document.getElementById('dishIngredients');
-const dishSteps = document.getElementById('dishSteps');
-
-// menu-page.js
 document.addEventListener("click", (e) => {
   const item = e.target.closest(".item");
   if (!item) return;
-
   const key = item.dataset.key;
   if (!key) return;
-
-  // utvrdi jel klik došao s Food ili Drinks papira
   const paper = item.closest(".paper");
-  const from = paper?.classList.contains("back") ? "drinks" : "food";
-
+  const from  = paper?.classList.contains("back") ? "drinks" : "food";
   window.location.href = `item.html?id=${encodeURIComponent(key)}&from=${from}`;
 });
-(function(){
+
+// ─── Tab iz URL parametra (npr. ?tab=drinks) ──────────────────────────────────
+
+(function () {
   const params = new URLSearchParams(location.search);
-  const tab = params.get("tab");
+  const tab    = params.get("tab");
   if (!tab) return;
-
-  const food = document.getElementById("page-food");
+  const food   = document.getElementById("page-food");
   const drinks = document.getElementById("page-drinks");
-
   if (tab === "drinks" && drinks) drinks.checked = true;
-  if (tab === "food" && food) food.checked = true;
+  if (tab === "food"   && food)   food.checked   = true;
 })();
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+loadMenu();
