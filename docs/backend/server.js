@@ -12,7 +12,9 @@ const rateLimit = require("express-rate-limit");
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false, // Needed to allow CDN scripts in admin page
+}));
 app.use(cors({
   origin: process.env.CORS_ORIGIN || "https://moxiecph-front.onrender.com",
   methods: ["GET", "POST", "OPTIONS"],
@@ -23,7 +25,7 @@ app.use(express.json());
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: { rejectUnauthorized: false }, // Fix: allows self-signed certs on Render
 });
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -37,7 +39,7 @@ const SLOT_END_HOUR     = Number(process.env.SLOT_END_HOUR      || 23);
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 
 const reservationLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 10,
   message: { error: "Too many reservation attempts. Please try again later." },
   standardHeaders: true,
@@ -103,6 +105,17 @@ function handleValidationErrors(req, res, next) {
   next();
 }
 
+// ─── Static Admin Files ───────────────────────────────────────────────────────
+
+// Serve admin.css and admin.js only to authenticated users
+app.get("/admin.css", adminAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "admin.css"));
+});
+
+app.get("/admin.js", adminAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "admin.js"));
+});
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // Admin page
@@ -166,7 +179,6 @@ app.get(
         return overlappingBooked + ppl <= MAX_TOTAL;
       });
 
-      // Filter out past slots if booking for today
       if (date === getTodayString()) {
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
@@ -193,30 +205,12 @@ app.get(
 app.post(
   "/reservations",
   [
-    body("firstName")
-      .trim()
-      .notEmpty()
-      .isLength({ max: 100 })
-      .withMessage("firstName is required (max 100 chars)"),
-    body("lastName")
-      .trim()
-      .notEmpty()
-      .isLength({ max: 100 })
-      .withMessage("lastName is required (max 100 chars)"),
-    body("email")
-      .trim()
-      .isEmail()
-      .normalizeEmail()
-      .withMessage("A valid email address is required"),
-    body("people")
-      .isInt({ min: 1, max: MAX_PER_SLOT })
-      .withMessage(`people must be between 1 and ${MAX_PER_SLOT}`),
-    body("date")
-      .matches(/^\d{4}-\d{2}-\d{2}$/)
-      .withMessage("date must be in YYYY-MM-DD format"),
-    body("time")
-      .custom(val => VALID_SLOT_SET.has(val))
-      .withMessage("time must be a valid reservation slot"),
+    body("firstName").trim().notEmpty().isLength({ max: 100 }),
+    body("lastName").trim().notEmpty().isLength({ max: 100 }),
+    body("email").trim().isEmail().normalizeEmail(),
+    body("people").isInt({ min: 1, max: MAX_PER_SLOT }),
+    body("date").matches(/^\d{4}-\d{2}-\d{2}$/),
+    body("time").custom(val => VALID_SLOT_SET.has(val)).withMessage("Invalid time slot"),
   ],
   handleValidationErrors,
   async (req, res) => {
@@ -228,7 +222,6 @@ app.post(
       await client.query("BEGIN");
       await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
 
-      // Check per-slot capacity
       const slotRes = await client.query(
         `SELECT COALESCE(SUM(people), 0)::int AS total
          FROM reservations
@@ -240,7 +233,6 @@ app.post(
         return res.status(409).json({ error: `This time slot is full (max ${MAX_PER_SLOT} guests).` });
       }
 
-      // Check restaurant-wide overlapping window capacity
       const winRes = await client.query(
         `SELECT COALESCE(SUM(people), 0)::int AS total
          FROM reservations
@@ -269,15 +261,9 @@ app.post(
       });
     } catch (err) {
       await client.query("ROLLBACK");
-
-      // Postgres serialization failure — safe to retry
       if (err.code === "40001") {
-        return res.status(409).json({
-          error: "Booking conflict detected. Please try again.",
-          retryable: true,
-        });
+        return res.status(409).json({ error: "Booking conflict detected. Please try again.", retryable: true });
       }
-
       console.error("POST /reservations error:", err);
       return res.status(500).json({ error: "Failed to save reservation." });
     } finally {
@@ -339,7 +325,7 @@ app.get("/admin/api/stats", adminAuth, async (_req, res) => {
   }
 });
 
-// ─── 404 catch-all ────────────────────────────────────────────────────────────
+// ─── 404 ──────────────────────────────────────────────────────────────────────
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });

@@ -1,0 +1,259 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --gold: rgba(242, 201, 76, 1);
+  --gold-soft: rgba(242, 201, 76, 0.18);
+  --gold-mid: rgba(242, 201, 76, 0.35);
+  --gold-text: rgba(242, 201, 76, 0.95);
+  --bg: #0b0b0b;
+  --surface: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #eee;
+  --muted: rgba(255, 255, 255, 0.55);
+  --grid-line: rgba(255, 255, 255, 0.06);
+  --radius: 14px;
+}
+
+body {
+  font-family: 'DM Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 28px 20px 60px;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 700px 500px at 10% 0%, rgba(242,201,76,0.06), transparent 60%),
+    radial-gradient(ellipse 500px 400px at 90% 80%, rgba(242,201,76,0.04), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.page-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ─── Header ─────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.page-header .logo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 12px var(--gold);
+  flex-shrink: 0;
+}
+
+.page-header h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-text);
+}
+
+/* ─── Cards ──────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--gold-soft);
+  border-radius: var(--radius);
+  padding: 22px;
+  backdrop-filter: blur(8px);
+}
+
+.card-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+/* ─── Controls row ───────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.controls label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+input[type="date"] {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--gold-soft);
+  background: rgba(242, 201, 76, 0.07);
+  color: var(--text);
+  padding: 0 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input[type="date"]:focus {
+  border-color: var(--gold-text);
+}
+
+button {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--gold-text);
+  background: var(--gold-mid);
+  color: var(--text);
+  padding: 0 18px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.18s, transform 0.1s;
+}
+
+button:hover {
+  background: rgba(242, 201, 76, 0.55);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+.pill {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-soft);
+  background: rgba(242, 201, 76, 0.08);
+  font-size: 12px;
+  color: var(--gold-text);
+}
+
+.pill:empty { visibility: hidden; }
+
+/* ─── Table ──────────────────────────────────────────── */
+.table-wrap {
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead tr {
+  background: rgba(242, 201, 76, 0.06);
+}
+
+th {
+  padding: 11px 14px;
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--gold-text);
+  font-weight: 500;
+  border-bottom: 1px solid var(--gold-soft);
+}
+
+td {
+  padding: 11px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+tbody tr:last-child td { border-bottom: none; }
+
+tbody tr {
+  transition: background 0.15s;
+}
+
+tbody tr:hover {
+  background: rgba(242, 201, 76, 0.04);
+}
+
+.muted { color: var(--muted); }
+
+/* ─── Stats grid ─────────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 680px) {
+  .stats-grid { grid-template-columns: 1fr; }
+}
+
+.panel {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 14px;
+}
+
+.panel-title {
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.chart-wrap {
+  position: relative;
+  height: 240px;
+}
+
+/* ─── Filter badge ───────────────────────────────────── */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-row .label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ─── Loading spinner ────────────────────────────────── */
+.loading-text {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 20px 0;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
