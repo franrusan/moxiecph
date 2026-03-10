@@ -492,25 +492,6 @@ footer {
 .paper::-webkit-scrollbar-thumb { background: rgba(0,0,0,.20); border-radius: 999px; }
 .paper::-webkit-scrollbar-track { background: rgba(0,0,0,.06); } */
 
-/* Spine shadows */
-.paper.front::before {
-  content: "";
-  position: absolute; top: 0; bottom: 0; left: 0;
-  width: 48px;
-  border-radius: 18px 0 0 18px;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(0,0,0,.20), transparent 75%);
-  opacity: .45;
-}
-.paper.back::before {
-  content: "";
-  position: absolute; top: 0; bottom: 0; right: 0;
-  width: 48px;
-  border-radius: 0 18px 18px 0;
-  pointer-events: none;
-  background: linear-gradient(270deg, rgba(0,0,0,.20), transparent 75%);
-  opacity: .45;
-}
 
 /* Paper typography */
 .paper-title {
@@ -818,7 +799,7 @@ footer {
     border-radius: 18px !important;
     padding-bottom: calc(26px + env(safe-area-inset-bottom)) !important;
   }
-  .paper-title      { font-size: 30px; }
+  .paper-title      { font-size: 30px; color: var(--accent); }
   .menu-cat-title   { font-size: 28px; margin: 18px 0 10px; }
 
   .item-img { width: 56px; height: 56px; flex: 0 0 56px; border-radius: 12px; }
