@@ -17,7 +17,7 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: process.env.CORS_ORIGIN || "https://moxiecph-front.onrender.com",
-  methods: ["GET", "POST", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 }));
 app.use(express.json());
 
@@ -321,6 +321,243 @@ app.get("/admin/api/stats", adminAuth, async (_req, res) => {
     res.json({ rows: q.rows });
   } catch (err) {
     console.error("GET /admin/api/stats error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ─── Public Menu ──────────────────────────────────────────────────────────────
+
+// GET /menu — sve vidljive stavke grupirane po kategoriji
+app.get("/menu", async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         m.id, m.slug, m.title, m.description, m.price, m.photo_url,
+         m.ingredients, m.steps,
+         c.id AS category_id, c.name AS category_name, c.type AS category_type
+       FROM menu_items m
+       JOIN categories c ON c.id = m.category_id
+       WHERE m.visible = true
+       ORDER BY c.sort_order, m.sort_order`
+    );
+
+    // Grupiraj po kategoriji
+    const grouped = [];
+    const map = new Map();
+    for (const r of rows) {
+      if (!map.has(r.category_id)) {
+        const cat = { id: r.category_id, name: r.category_name, type: r.category_type, items: [] };
+        map.set(r.category_id, cat);
+        grouped.push(cat);
+      }
+      map.get(r.category_id).items.push({
+        id: r.id, slug: r.slug, title: r.title,
+        description: r.description, price: r.price, photo_url: r.photo_url,
+        ingredients: r.ingredients, steps: r.steps,
+      });
+    }
+
+    res.json({ categories: grouped });
+  } catch (err) {
+    console.error("GET /menu error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /menu/:slug — jedna stavka
+app.get("/menu/:slug", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         m.id, m.slug, m.title, m.description, m.price, m.photo_url,
+         m.ingredients, m.steps,
+         c.name AS category_name, c.type AS category_type
+       FROM menu_items m
+       JOIN categories c ON c.id = m.category_id
+       WHERE m.slug = $1 AND m.visible = true`,
+      [req.params.slug]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("GET /menu/:slug error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ─── Admin Menu API ───────────────────────────────────────────────────────────
+
+// GET /admin/api/menu — sve stavke (i nevidljive)
+app.get("/admin/api/menu", adminAuth, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         m.id, m.slug, m.title, m.description, m.price, m.photo_url,
+         m.ingredients, m.steps, m.visible, m.sort_order,
+         c.id AS category_id, c.name AS category_name, c.type AS category_type
+       FROM menu_items m
+       JOIN categories c ON c.id = m.category_id
+       ORDER BY c.sort_order, m.sort_order`
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    console.error("GET /admin/api/menu error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST /admin/api/menu — dodaj stavku
+app.post("/admin/api/menu", adminAuth, [
+  body("title").trim().notEmpty().isLength({ max: 200 }),
+  body("category_id").isInt({ min: 1 }),
+  body("price").trim().notEmpty().isLength({ max: 50 }),
+  body("description").optional().trim().isLength({ max: 500 }),
+  body("photo_url").optional().trim().isURL().withMessage("photo_url must be a valid URL"),
+  body("ingredients").optional().isArray(),
+  body("steps").optional().isArray(),
+  body("visible").optional().isBoolean(),
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { title, category_id, price, description = "", photo_url = null,
+            ingredients = [], steps = [], visible = true } = req.body;
+
+    // Generiraj slug iz naslova
+    const baseSlug = title.toLowerCase()
+      .replace(/[čć]/g, "c").replace(/[šś]/g, "s").replace(/[žź]/g, "z").replace(/đ/g, "d")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+    // Osiguraj jedinstvenost sluga
+    const existing = await pool.query("SELECT slug FROM menu_items WHERE slug LIKE $1", [`${baseSlug}%`]);
+    const slug = existing.rows.length ? `${baseSlug}-${existing.rows.length + 1}` : baseSlug;
+
+    const { rows } = await pool.query(
+      `INSERT INTO menu_items (category_id, slug, title, description, price, photo_url, ingredients, steps, visible)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [category_id, slug, title, description, price, photo_url,
+       JSON.stringify(ingredients), JSON.stringify(steps), visible]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("POST /admin/api/menu error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT /admin/api/menu/:id — uredi stavku
+app.put("/admin/api/menu/:id", adminAuth, [
+  body("title").trim().notEmpty().isLength({ max: 200 }),
+  body("category_id").isInt({ min: 1 }),
+  body("price").trim().notEmpty().isLength({ max: 50 }),
+  body("description").optional().trim().isLength({ max: 500 }),
+  body("photo_url").optional({ nullable: true }).isURL().withMessage("photo_url must be a valid URL"),
+  body("ingredients").optional().isArray(),
+  body("steps").optional().isArray(),
+  body("visible").optional().isBoolean(),
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { title, category_id, price, description = "",
+            photo_url = null, ingredients = [], steps = [], visible = true } = req.body;
+
+    const { rows } = await pool.query(
+      `UPDATE menu_items SET
+         category_id = $1, title = $2, description = $3, price = $4,
+         photo_url = $5, ingredients = $6, steps = $7, visible = $8
+       WHERE id = $9 RETURNING *`,
+      [category_id, title, description, price, photo_url,
+       JSON.stringify(ingredients), JSON.stringify(steps), visible, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("PUT /admin/api/menu/:id error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PATCH /admin/api/menu/:id/visibility — toggle visible
+app.patch("/admin/api/menu/:id/visibility", adminAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE menu_items SET visible = NOT visible WHERE id = $1 RETURNING id, title, visible`,
+      [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("PATCH /admin/api/menu/:id/visibility error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// DELETE /admin/api/menu/:id — obriši stavku
+app.delete("/admin/api/menu/:id", adminAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "DELETE FROM menu_items WHERE id = $1 RETURNING id", [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /admin/api/menu/:id error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ─── Admin Categories API ─────────────────────────────────────────────────────
+
+// GET /admin/api/categories
+app.get("/admin/api/categories", adminAuth, async (_req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM categories ORDER BY sort_order");
+    res.json({ categories: rows });
+  } catch (err) {
+    console.error("GET /admin/api/categories error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET /api/categories — public (za forme na frontendu)
+app.get("/api/categories", async (_req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM categories ORDER BY sort_order");
+    res.json({ categories: rows });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST /admin/api/categories — dodaj kategoriju
+app.post("/admin/api/categories", adminAuth, [
+  body("name").trim().notEmpty().isLength({ max: 100 }),
+  body("type").isIn(["food", "drink"]),
+  body("sort_order").optional().isInt({ min: 0 }),
+], handleValidationErrors, async (req, res) => {
+  try {
+    const { name, type, sort_order = 0 } = req.body;
+    const { rows } = await pool.query(
+      "INSERT INTO categories (name, type, sort_order) VALUES ($1, $2, $3) RETURNING *",
+      [name, type, sort_order]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("POST /admin/api/categories error:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// DELETE /admin/api/categories/:id
+app.delete("/admin/api/categories/:id", adminAuth, async (req, res) => {
+  try {
+    // Provjeri ima li stavki u kategoriji
+    const check = await pool.query("SELECT COUNT(*) FROM menu_items WHERE category_id = $1", [req.params.id]);
+    if (parseInt(check.rows[0].count) > 0) {
+      return res.status(409).json({ error: "Kategorija ima stavke — prvo ih obriši ili premjesti." });
+    }
+    await pool.query("DELETE FROM categories WHERE id = $1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /admin/api/categories/:id error:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
