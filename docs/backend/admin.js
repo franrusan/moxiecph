@@ -70,7 +70,7 @@ async function loadSummary() {
         <tr>
           <td>${row.time}</td>
           <td>${row.total_people}</td>
-          <td class="muted">${row.parties}</td>
+          <td class="pills-cell">${renderPills(row.parties_data)}</td>
         </tr>`
       )
       .join("");
@@ -590,7 +590,7 @@ document.getElementById("newResFormEl")?.addEventListener("submit", async (e) =>
   const payload = {
     firstName: document.getElementById("nr_firstName").value.trim(),
     lastName:  document.getElementById("nr_lastName").value.trim(),
-    email:     document.getElementById("nr_email").value.trim(),
+    email:     "admin@moxiecph.com",
     people:    Number(document.getElementById("nr_people").value),
     date:      document.getElementById("nr_date").value,
     time:      document.getElementById("nr_time").value,
