@@ -450,7 +450,7 @@ app.put("/admin/api/menu/:id", adminAuth, [
   body("category_id").isInt({ min: 1 }),
   body("price").trim().notEmpty().isLength({ max: 50 }),
   body("description").optional().trim().isLength({ max: 500 }),
-  body("photo_url").optional({ nullable: true }).isURL().withMessage("photo_url must be a valid URL"),
+  body("photo_url").optional({ nullable: true, checkFalsy: true }).trim(),
   body("ingredients").optional().isArray(),
   body("steps").optional().isArray(),
   body("visible").optional().isBoolean(),
