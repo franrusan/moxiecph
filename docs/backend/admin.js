@@ -437,32 +437,7 @@ loadMenuAdmin();
 
 let currentResId = null;
 
-// Override loadSummary da renderira pill gumbe
-const _origLoadSummary = loadSummary;
-loadSummary = async function() {
-  tbody.innerHTML = `<tr><td colspan="3" class="muted loading-text">Učitavam…</td></tr>`;
-  sumPill.textContent = "";
-  const auth = getAuthHeader();
-  if (!auth) return;
-  try {
-    const r = await fetch(`/admin/api/summary?date=${encodeURIComponent(dateInput.value)}`, {
-      cache: "no-store", headers: { Authorization: auth },
-    });
-    const data = await r.json();
-    if (!r.ok) { tbody.innerHTML = `<tr><td colspan="3" class="muted">Greška: ${data.error || r.status}</td></tr>`; return; }
-    if (!data.rows.length) { tbody.innerHTML = `<tr><td colspan="3" class="muted">Nema rezervacija za taj datum.</td></tr>`; return; }
-    sumPill.textContent = `Ukupno: ${data.totalPeople} gostiju`;
-    tbody.innerHTML = data.rows.map(row => `
-      <tr>
-        <td>${row.time}</td>
-        <td>${row.total_people}</td>
-        <td class="pills-cell">${renderPills(row.parties_data)}</td>
-      </tr>`).join("");
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="3" class="muted">Greška pri dohvatu podataka.</td></tr>`;
-    console.error("loadSummary:", err);
-  }
-};
+
 
 function renderPills(partiesData) {
   if (!partiesData) return "";
@@ -578,6 +553,42 @@ document.getElementById("cancelNewRes")?.addEventListener("click", () => {
   document.getElementById("newResMsg").textContent = "";
 });
 
+// ─── Admin form availability ──────────────────────────────────────────────────
+
+async function refreshAdminAvailability() {
+  const auth = getAuthHeader();
+  if (!auth) return;
+  const date   = document.getElementById("nr_date")?.value;
+  const people = document.getElementById("nr_people")?.value;
+  const sel    = document.getElementById("nr_time");
+  if (!sel) return;
+
+  if (!date || !people) {
+    sel.innerHTML = '<option value="">Odaberi datum i broj ljudi</option>';
+    return;
+  }
+
+  sel.innerHTML = '<option value="">Učitavam...</option>';
+  try {
+    const r = await fetch(`/availability?date=${encodeURIComponent(date)}&people=${encodeURIComponent(people)}`, {
+      cache: "no-store", headers: { Authorization: auth },
+    });
+    const data = await r.json();
+    const slots = data.available || [];
+    if (!slots.length) {
+      sel.innerHTML = '<option value="">Nema slobodnih termina</option>';
+    } else {
+      sel.innerHTML = '<option value="">Odaberi</option>' +
+        slots.map(s => `<option value="${s}">${s}</option>`).join("");
+    }
+  } catch {
+    sel.innerHTML = '<option value="">Greška pri dohvatu</option>';
+  }
+}
+
+document.getElementById("nr_date")?.addEventListener("change", refreshAdminAvailability);
+document.getElementById("nr_people")?.addEventListener("change", refreshAdminAvailability);
+
 document.getElementById("newResFormEl")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const auth = getAuthHeader();
@@ -590,7 +601,6 @@ document.getElementById("newResFormEl")?.addEventListener("submit", async (e) =>
   const payload = {
     firstName: document.getElementById("nr_firstName").value.trim(),
     lastName:  document.getElementById("nr_lastName").value.trim(),
-    email:     "admin@moxiecph.com",
     people:    Number(document.getElementById("nr_people").value),
     date:      document.getElementById("nr_date").value,
     time:      document.getElementById("nr_time").value,
