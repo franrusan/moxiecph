@@ -475,7 +475,7 @@ footer {
   scrollbar-width: thin;
   position: relative;
 }
-.paper::after {
+/*.paper::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -491,7 +491,7 @@ footer {
 }
 .paper::-webkit-scrollbar       { width: 8px; }
 .paper::-webkit-scrollbar-thumb { background: rgba(0,0,0,.20); border-radius: 999px; }
-.paper::-webkit-scrollbar-track { background: rgba(0,0,0,.06); }
+.paper::-webkit-scrollbar-track { background: rgba(0,0,0,.06); } */
 
 /* Spine shadows */
 .paper.front::before {
@@ -834,6 +834,16 @@ footer {
 
   .item-page .page-nav { position: static !important; transform: none !important; margin-top: 18px; display: flex; justify-content: center; }
   .item-page .paper { padding-bottom: 24px; }
+  .book { min-height: 0; }
+  .paper.front, .paper.back {
+    position: relative !important;
+    inset: auto !important;
+    padding-bottom: 20px;
+  }
+  .back { display: none; }
+  #page-drinks:checked ~ .book .front { display: none; }
+  #page-drinks:checked ~ .book .back  { display: block; }
+  #page-food:checked ~ .book .back    { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
