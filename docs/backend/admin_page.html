@@ -72,6 +72,95 @@
 
 </div>
 
+
+  <!-- Menu Management -->
+  <div class="card">
+    <div class="card-title">Uredi menu</div>
+
+    <div class="controls" style="margin-bottom:20px;">
+      <button id="addMealBtn">+ Dodaj jelo</button>
+      <button id="addDrinkBtn">+ Dodaj piće</button>
+      <button id="addCatBtn">+ Nova kategorija</button>
+    </div>
+
+    <div id="menuList"></div>
+
+    <!-- Forma: dodaj/uredi stavku -->
+    <div id="menuItemForm" style="display:none;" class="sub-form">
+      <div class="sub-form-title" id="formTitle">Dodaj stavku</div>
+      <form id="menuItemFormEl">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Naziv</label>
+            <input id="fi_title" type="text" required placeholder="Npr. Krem juha od povrća"/>
+          </div>
+          <div class="form-group">
+            <label>Cijena</label>
+            <input id="fi_price" type="text" required placeholder="Npr. 10€"/>
+          </div>
+          <div class="form-group">
+            <label>Kategorija</label>
+            <select id="fi_category"></select>
+          </div>
+          <div class="form-group">
+            <label>Foto URL</label>
+            <input id="fi_photo" type="text" placeholder="https://... ili assets/..."/>
+          </div>
+          <div class="form-group form-group--full">
+            <label>Opis</label>
+            <input id="fi_desc" type="text" placeholder="Kratki opis jela"/>
+          </div>
+          <div id="dishFields" class="form-group--full" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="form-group">
+              <label>Sastojci <span class="muted">(jedan po retku)</span></label>
+              <textarea id="fi_ingredients" rows="5" placeholder="1 luk&#10;Maslinovo ulje&#10;Sol, papar"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Priprema <span class="muted">(jedan korak po retku)</span></label>
+              <textarea id="fi_steps" rows="5" placeholder="Sotiraj luk 3 min.&#10;Dodaj povrće."></textarea>
+            </div>
+          </div>
+          <div class="form-group form-check">
+            <label>
+              <input id="fi_visible" type="checkbox" checked/>
+              Vidljivo na meniju
+            </label>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit">Spremi</button>
+          <button type="button" id="cancelForm" class="btn-secondary">Odustani</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Forma: nova kategorija -->
+    <div id="categoryForm" style="display:none;" class="sub-form">
+      <div class="sub-form-title">Nova kategorija</div>
+      <form id="categoryFormEl">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Naziv kategorije</label>
+            <input id="ci_name" type="text" required placeholder="Npr. Predjela"/>
+          </div>
+          <div class="form-group">
+            <label>Tip</label>
+            <select id="ci_type">
+              <option value="food">🍽️ Hrana</option>
+              <option value="drink">🍷 Piće</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit">Dodaj kategoriju</button>
+          <button type="button" id="cancelCatForm" class="btn-secondary">Odustani</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="admin.js"></script>
 </body>

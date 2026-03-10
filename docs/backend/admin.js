@@ -215,3 +215,220 @@ resetBtn?.addEventListener("click", () => {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 loadStats();
+
+// ─── Menu Management ──────────────────────────────────────────────────────────
+
+let allCategories = [];
+let allMenuItems  = [];
+let editingItemId = null;
+
+const menuListEl    = document.getElementById("menuList");
+const menuFormEl    = document.getElementById("menuItemForm");
+const formTitleEl   = document.getElementById("formTitle");
+const cancelFormBtn = document.getElementById("cancelForm");
+const addMealBtn    = document.getElementById("addMealBtn");
+const addDrinkBtn   = document.getElementById("addDrinkBtn");
+const addCatBtn     = document.getElementById("addCatBtn");
+const catFormEl     = document.getElementById("categoryForm");
+const cancelCatBtn  = document.getElementById("cancelCatForm");
+
+async function loadMenuAdmin() {
+  const auth = getAuthHeader();
+  if (!auth) return;
+
+  const [catRes, itemRes] = await Promise.all([
+    fetch("/admin/api/categories", { cache: "no-store", headers: { Authorization: auth } }),
+    fetch("/admin/api/menu",       { cache: "no-store", headers: { Authorization: auth } }),
+  ]);
+
+  const catData  = await catRes.json();
+  const itemData = await itemRes.json();
+
+  allCategories = catData.categories || [];
+  allMenuItems  = itemData.items     || [];
+
+  renderMenuList();
+}
+
+function renderMenuList() {
+  const groups = new Map();
+  for (const cat of allCategories) groups.set(cat.id, { cat, items: [] });
+  for (const item of allMenuItems) {
+    if (groups.has(item.category_id)) groups.get(item.category_id).items.push(item);
+  }
+
+  let html = "";
+  for (const { cat, items } of groups.values()) {
+    html += `
+      <div class="menu-group">
+        <div class="menu-group-header">
+          <span class="menu-group-title">${cat.name}</span>
+          <span class="menu-group-type">${cat.type === "food" ? "🍽️ Hrana" : "🍷 Piće"}</span>
+          <button class="btn-icon btn-danger" onclick="deleteCategory(${cat.id})" title="Obriši kategoriju">✕</button>
+        </div>`;
+    if (!items.length) html += `<div class="menu-empty">Nema stavki u ovoj kategoriji.</div>`;
+    for (const item of items) {
+      html += `
+        <div class="menu-row ${item.visible ? "" : "menu-row--hidden"}">
+          <label class="toggle" title="${item.visible ? "Vidljivo" : "Skriveno"}">
+            <input type="checkbox" ${item.visible ? "checked" : ""} onchange="toggleVisible(${item.id}, this)">
+            <span class="toggle-track"></span>
+          </label>
+          <span class="menu-row-title">${item.title}</span>
+          <span class="menu-row-price">${item.price}</span>
+          <button class="btn-icon" onclick="openEditForm(${item.id})">✎</button>
+          <button class="btn-icon btn-danger" onclick="deleteItem(${item.id})">✕</button>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  if (menuListEl) menuListEl.innerHTML = html || `<div class="muted">Nema stavki.</div>`;
+}
+
+async function toggleVisible(id, checkbox) {
+  const auth = getAuthHeader();
+  if (!auth) return;
+  try {
+    const r = await fetch(`/admin/api/menu/${id}/visibility`, {
+      method: "PATCH", headers: { Authorization: auth },
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    const item = allMenuItems.find(i => i.id === id);
+    if (item) item.visible = data.visible;
+    renderMenuList();
+  } catch (err) {
+    checkbox.checked = !checkbox.checked;
+    alert("Greška: " + err.message);
+  }
+}
+
+async function deleteItem(id) {
+  if (!confirm("Obrisati ovu stavku?")) return;
+  const auth = getAuthHeader();
+  if (!auth) return;
+  try {
+    const r = await fetch(`/admin/api/menu/${id}`, { method: "DELETE", headers: { Authorization: auth } });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
+    allMenuItems = allMenuItems.filter(i => i.id !== id);
+    renderMenuList();
+  } catch (err) { alert("Greška: " + err.message); }
+}
+
+async function deleteCategory(id) {
+  if (!confirm("Obrisati ovu kategoriju? Mora biti prazna.")) return;
+  const auth = getAuthHeader();
+  if (!auth) return;
+  try {
+    const r = await fetch(`/admin/api/categories/${id}`, { method: "DELETE", headers: { Authorization: auth } });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
+    allCategories = allCategories.filter(c => c.id !== id);
+    renderMenuList();
+  } catch (err) { alert("Greška: " + err.message); }
+}
+
+function buildCategoryOptions(selectedId = null, typeFilter = null) {
+  return allCategories
+    .filter(c => typeFilter ? c.type === typeFilter : true)
+    .map(c => `<option value="${c.id}" ${c.id === selectedId ? "selected" : ""}>${c.name}</option>`)
+    .join("");
+}
+
+function openAddForm(typeFilter) {
+  editingItemId = null;
+  formTitleEl.textContent = typeFilter === "food" ? "Dodaj jelo" : "Dodaj piće";
+  document.getElementById("fi_category").innerHTML = buildCategoryOptions(null, typeFilter);
+  document.getElementById("fi_title").value        = "";
+  document.getElementById("fi_price").value        = "";
+  document.getElementById("fi_desc").value         = "";
+  document.getElementById("fi_photo").value        = "";
+  document.getElementById("fi_ingredients").value  = "";
+  document.getElementById("fi_steps").value        = "";
+  document.getElementById("fi_visible").checked    = true;
+  document.getElementById("dishFields").style.display = typeFilter === "food" ? "" : "none";
+  menuFormEl.style.display = "";
+  menuFormEl.scrollIntoView({ behavior: "smooth" });
+}
+
+function openEditForm(id) {
+  const item = allMenuItems.find(i => i.id === id);
+  if (!item) return;
+  editingItemId = id;
+  formTitleEl.textContent = "Uredi stavku";
+  document.getElementById("fi_category").innerHTML  = buildCategoryOptions(item.category_id);
+  document.getElementById("fi_title").value         = item.title;
+  document.getElementById("fi_price").value         = item.price;
+  document.getElementById("fi_desc").value          = item.description || "";
+  document.getElementById("fi_photo").value         = item.photo_url || "";
+  document.getElementById("fi_ingredients").value   = (item.ingredients || []).join("\n");
+  document.getElementById("fi_steps").value         = (item.steps || []).join("\n");
+  document.getElementById("fi_visible").checked     = item.visible;
+  document.getElementById("dishFields").style.display = item.category_type === "food" ? "" : "none";
+  menuFormEl.style.display = "";
+  menuFormEl.scrollIntoView({ behavior: "smooth" });
+}
+
+cancelFormBtn?.addEventListener("click", () => { menuFormEl.style.display = "none"; });
+addMealBtn?.addEventListener("click",  () => openAddForm("food"));
+addDrinkBtn?.addEventListener("click", () => openAddForm("drink"));
+
+document.getElementById("menuItemFormEl")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const auth = getAuthHeader();
+  if (!auth) return;
+  const payload = {
+    category_id:  Number(document.getElementById("fi_category").value),
+    title:        document.getElementById("fi_title").value.trim(),
+    price:        document.getElementById("fi_price").value.trim(),
+    description:  document.getElementById("fi_desc").value.trim(),
+    photo_url:    document.getElementById("fi_photo").value.trim() || null,
+    ingredients:  document.getElementById("fi_ingredients").value.split("\n").map(s => s.trim()).filter(Boolean),
+    steps:        document.getElementById("fi_steps").value.split("\n").map(s => s.trim()).filter(Boolean),
+    visible:      document.getElementById("fi_visible").checked,
+  };
+  try {
+    const url    = editingItemId ? `/admin/api/menu/${editingItemId}` : "/admin/api/menu";
+    const method = editingItemId ? "PUT" : "POST";
+    const r = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
+    menuFormEl.style.display = "none";
+    await loadMenuAdmin();
+  } catch (err) { alert("Greška: " + err.message); }
+});
+
+addCatBtn?.addEventListener("click", () => {
+  document.getElementById("ci_name").value = "";
+  document.getElementById("ci_type").value = "food";
+  catFormEl.style.display = "";
+  catFormEl.scrollIntoView({ behavior: "smooth" });
+});
+
+cancelCatBtn?.addEventListener("click", () => { catFormEl.style.display = "none"; });
+
+document.getElementById("categoryFormEl")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const auth = getAuthHeader();
+  if (!auth) return;
+  const payload = {
+    name:       document.getElementById("ci_name").value.trim(),
+    type:       document.getElementById("ci_type").value,
+    sort_order: allCategories.length + 1,
+  };
+  try {
+    const r = await fetch("/admin/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: auth },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
+    catFormEl.style.display = "none";
+    await loadMenuAdmin();
+  } catch (err) { alert("Greška: " + err.message); }
+});
+
+loadMenuAdmin();

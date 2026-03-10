@@ -258,7 +258,197 @@ tbody tr:hover {
   letter-spacing: 0.05em;
 }
 
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) sepia(1) saturate(5) hue-rotate(5deg);
+/* ─── Menu Management ────────────────────────────────── */
+
+.menu-group {
+  margin-bottom: 18px;
+}
+
+.menu-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--gold-soft);
+  margin-bottom: 6px;
+}
+
+.menu-group-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold-text);
+  letter-spacing: 0.05em;
+}
+
+.menu-group-type {
+  font-size: 11px;
+  color: var(--muted);
+  margin-right: auto;
+}
+
+.menu-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 0;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 6px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.menu-row:hover { background: rgba(255,255,255,0.03); }
+
+.menu-row--hidden { opacity: 0.45; }
+
+.menu-row-title {
+  flex: 1;
+  font-size: 13px;
+}
+
+.menu-row-price {
+  font-size: 12px;
+  color: var(--gold-text);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Toggle switch */
+.toggle { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track {
+  width: 34px; height: 18px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 999px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.toggle input:checked + .toggle-track { background: var(--gold); }
+.toggle input:checked + .toggle-track::after { transform: translateX(16px); }
+
+/* Icon buttons */
+.btn-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-icon:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+.btn-danger:hover { background: rgba(220,50,50,0.15); color: #f88; border-color: rgba(220,50,50,0.3); }
+
+/* Sub-form */
+.sub-form {
+  margin-top: 20px;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid var(--gold-soft);
+  background: rgba(0,0,0,0.2);
+}
+
+.sub-form-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold-text);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group--full { grid-column: 1 / -1; }
+
+.form-group label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+  resize: vertical;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: var(--gold-text);
+}
+
+.form-group select option { background: #1a1a1a; }
+
+.form-check label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.form-check input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--gold);
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+
+@media (max-width: 600px) {
+  .form-grid { grid-template-columns: 1fr; }
+  #dishFields { grid-template-columns: 1fr !important; }
 }
