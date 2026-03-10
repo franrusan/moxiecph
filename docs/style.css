@@ -729,17 +729,7 @@ footer{
   color: var(--paper-ink);
   border: 1px solid rgba(0,0,0,.18);
   border-radius: 18px;
-
-  /* no repeating lines = no grid */
-  background:
-    /* soft center light */
-    radial-gradient(1000px 700px at 50% 18%, rgba(255,255,255,.78), transparent 62%),
-    /* subtle stains */
-    radial-gradient(420px 280px at 18% 28%, rgba(120,78,35,.12), transparent 60%),
-    radial-gradient(520px 340px at 78% 36%, rgba(120,78,35,.10), transparent 62%),
-    radial-gradient(520px 380px at 55% 78%, rgba(90,60,30,.10), transparent 65%),
-    /* base paper */
-    linear-gradient(180deg, var(--paper), var(--paper2));
+  background: var(--paper);
 
   box-shadow:
     0 28px 110px rgba(0,0,0,.55),
