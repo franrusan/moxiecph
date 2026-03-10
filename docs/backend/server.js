@@ -627,7 +627,8 @@ app.post("/admin/api/reservations", adminAuth, [
   body("date").matches(/^\d{4}-\d{2}-\d{2}$/),
   body("time").custom(val => VALID_SLOT_SET.has(val)).withMessage("Invalid time slot"),
 ], handleValidationErrors, async (req, res) => {
-  const { firstName, lastName, email, date, time } = req.body;
+  const { firstName, lastName, date, time } = req.body;
+  const email = "admin@moxiecph.com"; // Fiksni email za rezervacije koje kreira admin
   const ppl = Number(req.body.people);
   try {
     const ins = await pool.query(
