@@ -40,7 +40,7 @@ const SLOT_END_HOUR     = Number(process.env.SLOT_END_HOUR      || 23);
 
 const reservationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 3,
   message: { error: "Too many reservation attempts. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -48,7 +48,7 @@ const reservationLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: 30,
   message: { error: "Too many requests. Please slow down." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -108,14 +108,13 @@ function handleValidationErrors(req, res, next) {
 // ─── Static Admin Files ───────────────────────────────────────────────────────
 
 // Serve admin.css and admin.js only to authenticated users
-app.get("/admin.css", adminAuth, (req, res) => {
+app.get("/admin.css", (req, res) => {
   res.sendFile(path.join(__dirname, "admin.css"));
 });
 
-app.get("/admin.js", adminAuth, (req, res) => {
+app.get("/admin.js", (req, res) => {
   res.sendFile(path.join(__dirname, "admin.js"));
 });
-
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // Admin page
